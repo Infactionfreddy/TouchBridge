@@ -177,9 +177,11 @@ public struct GestureEngine: Sendable {
         return (actions, true)
     }
 
-    // Replaced in Task 9.
     private mutating func finishMulti(newCount n: Int) -> ([Action], Bool) {
-        state = n == 0 ? .idle : .consumed
+        guard case .multiPending(let count, _, _) = state else { return ([], false) }
+        if n == 0 { state = .idle; return ([], false) }
+        if n > count { state = .idle; return ([], true) }   // re-enter with more fingers (or consumed for 5+)
+        state = .consumed
         return ([], false)
     }
 
@@ -216,9 +218,8 @@ public struct GestureEngine: Sendable {
                             last: c)
     }
 
-    // Replaced in Task 9.
     private mutating func enterMulti(_ touches: [ActiveTouch], _ timestamp: UInt64) {
-        state = .consumed
+        state = .multiPending(count: touches.count, startCentroid: Geometry.centroid(touches), startTime: timestamp)
     }
 
     // MARK: - Same finger count
@@ -294,9 +295,24 @@ public struct GestureEngine: Sendable {
         }
     }
 
-    // Replaced in Task 9.
     private mutating func continueMulti(_ touches: [ActiveTouch], _ timestamp: UInt64) -> [Action] {
-        []
+        guard case .multiPending(let count, let c0, let startTime) = state else { return [] }
+        if Geometry.seconds(from: startTime, to: timestamp) > config.swipeMaxDuration {
+            state = .consumed
+            return []
+        }
+        let c = Geometry.centroid(touches)
+        let dx = c.x - c0.x
+        let dy = c.y - c0.y
+        guard hypot(dx, dy) >= config.swipeDistance else { return [] }
+        state = .consumed
+        let direction: SwipeDirection
+        if abs(dx) >= abs(dy) {
+            direction = dx > 0 ? .right : .left
+        } else {
+            direction = dy > 0 ? .down : .up
+        }
+        return [.swipe(fingers: count, direction: direction)]
     }
 
     // MARK: - Taps
