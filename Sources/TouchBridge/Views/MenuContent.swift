@@ -26,6 +26,7 @@ struct MenuContent: View {
         .onAppear { state.refreshDisplays() }
         Divider()
         Button("Permissions…") { state.showPermissions() }
+        Button("Gesture Identifier…") { state.showIdentifier() }
         Button("Open settings file") { state.openSettingsFile() }
         Divider()
         Button("Quit TouchBridge") { NSApp.terminate(nil) }

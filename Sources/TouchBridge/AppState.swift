@@ -72,8 +72,11 @@ final class AppState {
         }
         inputMonitoringGranted = input
         accessibilityGranted = ax
-        if allPermissionsGranted, controller == nil {
-            startController()
+        if allPermissionsGranted {
+            if controller == nil { startController() } else { controller?.start() }
+        } else if let controller {
+            controller.pause()
+            showPermissions()
         }
     }
 
@@ -122,6 +125,10 @@ final class AppState {
 
     func showPermissions() {
         Windows.shared.show(PermissionsView(state: self), title: "TouchBridge Permissions", id: "permissions")
+    }
+
+    func showIdentifier() {
+        Windows.shared.show(GestureIdentifierView(state: self), title: "Gesture Identifier", id: "identifier")
     }
 
     func openSettingsFile() {

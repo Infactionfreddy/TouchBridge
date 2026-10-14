@@ -57,12 +57,17 @@ final class PipelineController {
         logger.info("controller started")
     }
 
-    func restart() {
-        logger.info("restarting after wake")
+    /// Stops the device manager and all pipelines; `start()` brings them back.
+    func pause() {
         deviceManager?.stop()
         deviceManager = nil
         for pipeline in registry.removeAll() { pipeline.shutdown() }
         onStatus?(.none)
+    }
+
+    func restart() {
+        logger.info("restarting after wake")
+        pause()
         // Devices re-enumerate after wake; reopen them a moment later.
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(1))
