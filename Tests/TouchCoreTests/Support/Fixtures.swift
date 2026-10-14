@@ -13,6 +13,10 @@ enum Fixtures {
         return url
     }
 
+    static func exists(_ name: String, _ ext: String) -> Bool {
+        Bundle.module.url(forResource: name, withExtension: ext, subdirectory: "Fixtures") != nil
+    }
+
     static func elanDescriptorBytes() throws -> [UInt8] {
         let text = try String(contentsOf: url("elan-report-descriptor", "hex"), encoding: .utf8)
         return try hexBytes(text)
