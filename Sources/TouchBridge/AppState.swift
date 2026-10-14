@@ -21,6 +21,9 @@ final class AppState {
     var accessibilityGranted = false
     var deviceStatus: DeviceStatus = .none
     var lastError: String?
+    var displays: [DisplayResolver.DisplayDescription] = []
+    var liveContacts: [Contact] = []
+    private var controller: PipelineController?
 
     let store: SettingsStore
     let permissions = PermissionCoordinator()
@@ -69,6 +72,27 @@ final class AppState {
         }
         inputMonitoringGranted = input
         accessibilityGranted = ax
+        if allPermissionsGranted, controller == nil {
+            startController()
+        }
+    }
+
+    private func startController() {
+        let controller = PipelineController(settings: settings)
+        controller.onStatus = { [weak self] status in self?.deviceStatus = status }
+        controller.onContacts = { [weak self] _, contacts in self?.liveContacts = contacts }
+        self.controller = controller
+        displays = controller.availableDisplays()
+        controller.start()
+    }
+
+    func refreshDisplays() {
+        displays = controller?.availableDisplays() ?? []
+    }
+
+    func selectDisplay(_ selection: DisplaySelection) {
+        settings.displaySelection = selection
+        saveSettings()
     }
 
     func setEnabled(_ enabled: Bool) {
@@ -93,6 +117,7 @@ final class AppState {
 
     func saveSettings() {
         do { try store.save(settings) } catch { lastError = "Could not save settings: \(error.localizedDescription)" }
+        controller?.updateSettings(settings)
     }
 
     func showPermissions() {
