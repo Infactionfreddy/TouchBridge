@@ -1,6 +1,11 @@
+@testable import TouchCore
 import Foundation
 
 enum Fixtures {
+    static func elanLayout() throws -> TouchScreenLayout {
+        try TouchScreenLayout(descriptor: HIDDescriptorParser().parse(elanDescriptorBytes()))
+    }
+
     static func url(_ name: String, _ ext: String) throws -> URL {
         guard let url = Bundle.module.url(forResource: name, withExtension: ext, subdirectory: "Fixtures") else {
             throw FixtureError.missing("\(name).\(ext)")
