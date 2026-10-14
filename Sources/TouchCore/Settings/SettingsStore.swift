@@ -1,7 +1,7 @@
 import Foundation
 
 /// Reads and writes `settings.json`. Never throws on load: a missing file yields defaults,
-/// an unreadable file is moved to `settings.json.broken` and defaults are returned.
+/// an unreadable file is moved to `settings.json.broken`, defaults are written and returned.
 public struct SettingsStore: Sendable {
     public let directory: URL
 
@@ -27,7 +27,9 @@ public struct SettingsStore: Sendable {
             let broken = URL(fileURLWithPath: fileURL.path + ".broken")
             try? FileManager.default.removeItem(at: broken)
             try? FileManager.default.moveItem(at: fileURL, to: broken)
-            return Settings()
+            let defaults = Settings()
+            try? save(defaults)
+            return defaults
         }
     }
 

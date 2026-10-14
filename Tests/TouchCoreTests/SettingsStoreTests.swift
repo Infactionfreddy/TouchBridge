@@ -45,8 +45,23 @@ import Foundation
         try FileManager.default.createDirectory(at: store.directory, withIntermediateDirectories: true)
         try Data("{not json".utf8).write(to: store.fileURL)
         #expect(store.load() == Settings())
-        #expect(!FileManager.default.fileExists(atPath: store.fileURL.path))
-        #expect(FileManager.default.fileExists(atPath: store.fileURL.path + ".broken"))
+        #expect(FileManager.default.fileExists(atPath: store.fileURL.path))
+        #expect(store.load() == Settings())
+        let broken = URL(fileURLWithPath: store.fileURL.path + ".broken")
+        #expect(FileManager.default.fileExists(atPath: broken.path))
+        #expect(try String(contentsOf: broken, encoding: .utf8) == "{not json")
+    }
+
+    @Test func newerSchemaVersionIsNormalizedOnSave() throws {
+        let store = try temporaryStore()
+        try FileManager.default.createDirectory(at: store.directory, withIntermediateDirectories: true)
+        try Data("{\"schemaVersion\": 7, \"enabled\": false}".utf8).write(to: store.fileURL)
+        let loaded = store.load()
+        #expect(loaded.enabled == false)
+        #expect(loaded.schemaVersion == 1)
+        try store.save(loaded)
+        let text = try String(contentsOf: store.fileURL, encoding: .utf8)
+        #expect(text.contains("\"schemaVersion\" : 1"))
     }
 
     @Test func defaultDirectoryIsApplicationSupport() {
