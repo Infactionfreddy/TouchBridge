@@ -79,6 +79,21 @@ import CoreGraphics
         #expect(e.isIdle)
     }
 
+    @Test func contactReplacedDuringTapClicksAndRestarts() {
+        var e = GestureEngine()
+        #expect(e.update(touches: [touch(1, 100, 100)], timestamp: ms(0)) == [.moveCursor(to: pt(100, 100))])
+        #expect(e.update(touches: [touch(2, 300, 100, start: ms(50), now: ms(50))], timestamp: ms(50)) == [.click(button: .left, at: pt(100, 100), count: 1), .moveCursor(to: pt(300, 100))])
+        #expect(e.update(touches: [], timestamp: ms(100)) == [.click(button: .left, at: pt(300, 100), count: 1)])
+    }
+
+    @Test func contactReplacedDuringDragEndsDragAndRestarts() {
+        var e = GestureEngine()
+        _ = e.update(touches: [touch(1, 100, 100)], timestamp: ms(0))
+        _ = e.update(touches: [touch(1, 130, 100)], timestamp: ms(30))
+        #expect(e.update(touches: [touch(2, 300, 100, start: ms(60), now: ms(60))], timestamp: ms(60)) == [.drag(phase: .ended, to: pt(130, 100)), .moveCursor(to: pt(300, 100))])
+        #expect(!e.isIdle)
+    }
+
     @Test func configIsCodableWithDefaults() throws {
         let decoded = try JSONDecoder().decode(GestureConfig.self, from: Data("{\"tapMaxMovement\": 12}".utf8))
         #expect(decoded.tapMaxMovement == 12)

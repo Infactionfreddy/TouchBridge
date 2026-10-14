@@ -27,6 +27,7 @@ public struct GestureEngine: Sendable {
     private(set) var state: State = .idle
     private var lastTap: TapRecord?
     private var momentumMayBeRunning = false
+    private var trackedIDs: Set<Int> = []
 
     public init(config: GestureConfig = GestureConfig()) {
         self.config = config
@@ -41,6 +42,11 @@ public struct GestureEngine: Sendable {
             return []
         }
         if n == expectedCount {
+            if n > 0 && Set(touches.map(\.id)) != trackedIDs {
+                // Same finger count but a different contact: the old gesture is over, a new one starts.
+                let (actions, _) = finishGesture(newCount: 0, timestamp: timestamp)
+                return actions + enter(touches, timestamp)
+            }
             return continueGesture(touches, timestamp)
         }
         let (actions, enter) = finishGesture(newCount: n, timestamp: timestamp)
@@ -76,6 +82,7 @@ public struct GestureEngine: Sendable {
         }
         state = .idle
         lastTap = nil
+        trackedIDs = []
         return actions
     }
 
@@ -129,6 +136,7 @@ public struct GestureEngine: Sendable {
 
     private mutating func enter(_ touches: [ActiveTouch], _ timestamp: UInt64) -> [Action] {
         var out: [Action] = []
+        trackedIDs = Set(touches.map(\.id))
         if momentumMayBeRunning && !touches.isEmpty {
             out.append(.cancelMomentum)
             momentumMayBeRunning = false
