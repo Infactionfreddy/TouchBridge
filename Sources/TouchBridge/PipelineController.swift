@@ -47,12 +47,15 @@ final class PipelineController {
         }
         let registry = self.registry
         // The sink runs on the HID thread: reports go straight to the pipeline's queue, everything else to the main actor.
+        // Control events use the main queue rather than separate Tasks so attach/detach keep their order (FIFO).
         let manager = DeviceManager(preferExclusive: true) { [weak self] event in
             if case .report(let id, let reportID, let raw, let timestamp) = event {
                 registry.pipeline(for: id)?.handle(reportID: reportID, raw: raw, timestamp: timestamp)
                 return
             }
-            Task { @MainActor in self?.handle(event) }
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated { self?.handle(event) }
+            }
         }
         deviceManager = manager
         manager.start()
@@ -99,6 +102,9 @@ final class PipelineController {
     private func handle(_ event: DeviceEvent) {
         switch event {
         case .attached(let id, let info, let mode):
+            // A re-matched device can be attached again without a detach: end the old pipeline's gestures first,
+            // also when the new descriptor turns out to be unusable.
+            registry.remove(id)?.shutdown()
             do {
                 let layout = try TouchScreenLayout(descriptor: HIDDescriptorParser().parse(info.descriptor))
                 let pipeline = DevicePipeline(id: id, info: info, layout: layout,
@@ -106,8 +112,6 @@ final class PipelineController {
                 pipeline.onContacts = { [weak self] contacts in
                     Task { @MainActor in self?.onContacts?(id, contacts) }
                 }
-                // A re-matched device can be attached again without a detach: end the old pipeline's gestures first.
-                registry.remove(id)?.shutdown()
                 registry.set(pipeline, for: id)
                 let problem: String?
                 switch mode {
@@ -122,10 +126,14 @@ final class PipelineController {
             } catch {
                 let hex = info.descriptor.map { String(format: "%02x", $0) }.joined()
                 logger.error("descriptor of \(info.product, privacy: .public) unusable: \(String(describing: error), privacy: .public); bytes: \(hex, privacy: .public)")
+                // The device is seized but useless to us: hand it back so macOS's single-touch driver works again.
+                deviceManager?.release(id)
                 onStatus?(.openFailed(name: "\(info.product) (descriptor)"))
             }
-        case .openFailed(_, let info, let status):
-            logger.error("open failed 0x\(String(status, radix: 16), privacy: .public)")
+        case .openFailed(let id, let info, let status):
+            // The manager closed an earlier entry for this ID before the failed open, so its pipeline gets no reports.
+            registry.remove(id)?.shutdown()
+            logger.error("open of \(info.product, privacy: .public) failed: 0x\(String(UInt32(bitPattern: status), radix: 16), privacy: .public)")
             onStatus?(.openFailed(name: info.product))
         case .detached(let id):
             registry.remove(id)?.shutdown()

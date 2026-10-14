@@ -39,9 +39,17 @@ final class AppState {
 
     var launchAtLoginEnabled: Bool { SMAppService.mainApp.status == .enabled }
 
+    /// Menu bar symbol (spec section 8/9 colours):
+    /// - red, permissions missing: `hand.raised.slash`
+    /// - green, a screen is seized exclusively and touch is on: `hand.tap.fill`
+    /// - yellow, a screen is open only shared and touch is on (macOS moves the cursor too): `exclamationmark.triangle`
+    ///   (there is no `hand.tap` variant with a warning badge)
+    /// - neutral, no screen, open failed or touch off: `hand.tap`
     var menuIcon: String {
         if !allPermissionsGranted { return "hand.raised.slash" }
-        if case .attached = deviceStatus, settings.enabled { return "hand.tap.fill" }
+        if case .attached(_, let exclusive, _) = deviceStatus, settings.enabled {
+            return exclusive ? "hand.tap.fill" : "exclamationmark.triangle"
+        }
         return "hand.tap"
     }
 

@@ -60,6 +60,7 @@ public final class DeviceManager: @unchecked Sendable {
                 kIOHIDPrimaryUsageKey: Int(HIDUsage.touchScreen.id),
             ]
             IOHIDManagerSetDeviceMatching(manager, matching as CFDictionary)
+            // The manager must be stopped before it is released; stop() is synchronous.
             let context = Unmanaged.passUnretained(self).toOpaque()
             IOHIDManagerRegisterDeviceMatchingCallback(manager, { context, _, _, device in
                 guard let context else { return }
@@ -98,8 +99,10 @@ public final class DeviceManager: @unchecked Sendable {
     /// Synchronous: returns after the HID thread has exited; no sink call happens after it returns.
     /// Must not be called from the sink (it runs on the HID thread).
     public func stop() {
-        let state = lock.withLock { running ? (runLoop, manager, finished) : nil }
-        guard let (runLoop, manager, finished) = state, let runLoop, let manager, let finished else { return }
+        let state = lock.withLock { running ? (runLoop, manager, finished, thread) : nil }
+        guard let (runLoop, manager, finished, hidThread) = state else { return }
+        precondition(Thread.current !== hidThread, "stop() must not be called from the HID thread (sink)")
+        guard let runLoop, let manager, let finished else { return }
         CFRunLoopPerformBlock(runLoop, CFRunLoopMode.defaultMode.rawValue) { [self] in
             let current = lock.withLock { () -> [Entry] in
                 let all = Array(entries.values)
@@ -120,6 +123,20 @@ public final class DeviceManager: @unchecked Sendable {
         }
     }
 
+    /// Closes one device so macOS's own driver gets it back; asynchronous, safe from any thread except the sink.
+    /// No sink event follows for the device, also not when it is unplugged later.
+    public func release(_ id: DeviceID) {
+        guard let runLoop = lock.withLock({ runLoop }) else { return }
+        CFRunLoopPerformBlock(runLoop, CFRunLoopMode.defaultMode.rawValue) { [self] in
+            let entry = lock.withLock { entries.removeValue(forKey: id) }
+            if let entry {
+                tearDown(entry)
+                logger.info("released device \(id, privacy: .public)")
+            }
+        }
+        CFRunLoopWakeUp(runLoop)
+    }
+
     private func tearDown(_ entry: Entry) {
         IOHIDDeviceRegisterInputReportCallback(entry.device, entry.buffer, entry.bufferSize, nil, nil)
         IOHIDDeviceClose(entry.device, IOOptionBits(kIOHIDOptionsTypeNone))
@@ -133,6 +150,8 @@ public final class DeviceManager: @unchecked Sendable {
             return
         }
         let info = Self.info(of: device)
+        // A re-matched device (same registry ID) is closed first, so the new open can seize it again.
+        if let old = lock.withLock({ entries.removeValue(forKey: id) }) { tearDown(old) }
         var seizeStatus: IOReturn = kIOReturnSuccess
         var status: IOReturn = kIOReturnUnsupported
         var mode = DeviceOpenMode.exclusive
@@ -156,8 +175,7 @@ public final class DeviceManager: @unchecked Sendable {
             return
         }
         let entry = Entry(device: device, bufferSize: max(info.maxInputReportSize, 64), id: id, manager: self)
-        let old = lock.withLock { entries.updateValue(entry, forKey: id) }
-        if let old { tearDown(old) }
+        lock.withLock { entries[id] = entry }
         let context = Unmanaged.passUnretained(entry).toOpaque()
         IOHIDDeviceRegisterInputReportCallback(device, entry.buffer, entry.bufferSize, { context, _, _, _, reportID, report, length in
             guard let context else { return }

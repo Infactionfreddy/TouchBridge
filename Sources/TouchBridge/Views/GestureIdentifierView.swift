@@ -5,11 +5,19 @@ import TouchCore
 @MainActor
 @Observable
 final class IdentifierLog {
-    var entries: [String] = []
+    /// `id` grows monotonically, so identical lines stay distinct rows in the list.
+    struct Entry: Identifiable {
+        let id: Int
+        let text: String
+    }
+
+    var entries: [Entry] = []
+    @ObservationIgnored private var nextID = 0
 
     func add(_ text: String) {
         let stamp = String(format: "%8.3f", Date().timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1000))
-        entries.append("\(stamp)  \(text)")
+        entries.append(Entry(id: nextID, text: "\(stamp)  \(text)"))
+        nextID += 1
         if entries.count > 300 { entries.removeFirst(entries.count - 300) }
     }
 }
@@ -112,8 +120,8 @@ struct GestureIdentifierView: View {
                     Button("Clear") { log.entries.removeAll() }
                 }
                 .padding(8)
-                List(log.entries.reversed(), id: \.self) { entry in
-                    Text(entry).font(.system(.caption, design: .monospaced))
+                List(log.entries.reversed()) { entry in
+                    Text(entry.text).font(.system(.caption, design: .monospaced))
                 }
             }
             .frame(minWidth: 380)

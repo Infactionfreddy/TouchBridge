@@ -46,8 +46,11 @@ final class DevicePipeline: @unchecked Sendable {
         queue.async { self.process(reportID: reportID, raw: raw, timestamp: timestamp) }
     }
 
+    /// Applies a new display mapping and ends open gestures. A mapping equal to the current one is ignored,
+    /// so saving unrelated settings does not cut off a gesture.
     func updateMapping(_ mapping: MappingConfig) {
         queue.async {
+            guard self.mapper.config != mapping else { return }
             self.mapper = DisplayMapper(config: mapping)
             self.finishGestures()
         }
