@@ -62,6 +62,8 @@ public enum HIDDescriptorError: Error, Equatable {
     case longItemUnsupported(offset: Int)
     case unsupportedGlobalItem(tag: UInt8, offset: Int)
     case unbalancedCollection(offset: Int)
+    /// A descriptor item exceeded one of the `HIDDescriptorParser` limits. `offset` is the item's offset.
+    case limitExceeded(offset: Int)
 }
 
 /// Parses the short-item subset of the HID 1.11 report descriptor format that touch screens use.
@@ -70,6 +72,17 @@ public enum HIDDescriptorError: Error, Equatable {
 /// Push/Pop and long items are rejected.
 public struct HIDDescriptorParser: Sendable {
     public init() {}
+
+    /// Caps protect against hostile descriptors from USB hardware. The Elan vendor blob has Report Count 256;
+    /// every cap leaves a large margin above what real touch screens declare.
+    private enum Limits {
+        static let maxReportCount = 4096
+        static let maxReportSize = 32
+        static let maxFields = 65_536
+        /// Usages accumulated for one main item, including ranges.
+        static let maxUsages = 4096
+        static let maxCollectionDepth = 32
+    }
 
     private struct Globals {
         var usagePage: UInt16 = 0
@@ -128,20 +141,30 @@ public struct HIDDescriptorParser: Sendable {
                     // A non-negative minimum lets the maximum be read unsigned (e.g. 25 FF = 255).
                     globals.logicalMax = (globals.logicalMin >= 0 && signed < 0) ? Int(raw) : signed
                 case 0x3, 0x4, 0x5, 0x6: break // physical min/max, unit exponent, unit
-                case 0x7: globals.reportSize = Int(raw)
+                case 0x7:
+                    guard raw <= UInt32(Limits.maxReportSize) else { throw HIDDescriptorError.limitExceeded(offset: i) }
+                    globals.reportSize = Int(raw)
                 case 0x8:
                     globals.reportID = UInt8(raw & 0xFF)
                     usesReportIDs = true
-                case 0x9: globals.reportCount = Int(raw)
+                case 0x9:
+                    guard raw <= UInt32(Limits.maxReportCount) else { throw HIDDescriptorError.limitExceeded(offset: i) }
+                    globals.reportCount = Int(raw)
                 default: throw HIDDescriptorError.unsupportedGlobalItem(tag: tag, offset: i)
                 }
             case 2: // local
                 switch tag {
-                case 0x0: locals.usages.append(Self.usage(raw, size: size, page: globals.usagePage))
+                case 0x0:
+                    guard locals.usages.count < Limits.maxUsages else { throw HIDDescriptorError.limitExceeded(offset: i) }
+                    locals.usages.append(Self.usage(raw, size: size, page: globals.usagePage))
                 case 0x1: locals.usageMin = Self.usage(raw, size: size, page: globals.usagePage)
                 case 0x2:
                     let max = Self.usage(raw, size: size, page: globals.usagePage)
                     if let min = locals.usageMin, min.id <= max.id {
+                        let rangeLength = Int(max.id) - Int(min.id) + 1
+                        guard locals.usages.count + rangeLength <= Limits.maxUsages else {
+                            throw HIDDescriptorError.limitExceeded(offset: i)
+                        }
                         for id in min.id...max.id { locals.usages.append(HIDUsage(page: min.page, id: id)) }
                     }
                     locals.usageMin = nil
@@ -150,6 +173,7 @@ public struct HIDDescriptorParser: Sendable {
             case 0: // main
                 switch tag {
                 case 0xA:
+                    guard stack.count < Limits.maxCollectionDepth else { throw HIDDescriptorError.limitExceeded(offset: i) }
                     let usage = locals.usages.first ?? HIDUsage(page: globals.usagePage, id: 0)
                     stack.append(HIDCollection(index: nextCollectionIndex, usage: usage, type: UInt8(raw & 0xFF)))
                     nextCollectionIndex += 1
@@ -163,6 +187,9 @@ public struct HIDDescriptorParser: Sendable {
                     let key = OffsetKey(kind: kind, reportID: globals.reportID)
                     var offset = offsets[key, default: 0]
                     let isConstant = (raw & 0x1) != 0
+                    guard fields.count + globals.reportCount <= Limits.maxFields else {
+                        throw HIDDescriptorError.limitExceeded(offset: i)
+                    }
                     for n in 0..<globals.reportCount {
                         let usage: HIDUsage
                         if locals.usages.isEmpty {
@@ -174,7 +201,11 @@ public struct HIDDescriptorParser: Sendable {
                                                bitOffset: offset, bitSize: globals.reportSize,
                                                logicalMin: globals.logicalMin, logicalMax: globals.logicalMax,
                                                isConstant: isConstant, collections: stack))
-                        offset += globals.reportSize
+                        // Report size is capped at 32 and fields at 65_536, so this cannot overflow in
+                        // practice; the checked add keeps the arithmetic from trapping regardless.
+                        let (next, overflow) = offset.addingReportingOverflow(globals.reportSize)
+                        guard !overflow else { throw HIDDescriptorError.limitExceeded(offset: i) }
+                        offset = next
                     }
                     offsets[key] = offset
                     locals = Locals()

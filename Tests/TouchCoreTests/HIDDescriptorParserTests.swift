@@ -120,4 +120,25 @@ import Testing
             try HIDDescriptorParser().parse([0x26, 0xA0])   // 2-byte item, only one data byte
         }
     }
+
+    @Test func rejectsHugeReportCount() {
+        // Report Count 0xFFFFFFFF (item at offset 10) would expand into billions of fields.
+        let bytes: [UInt8] = [0x05, 0x01, 0x09, 0x02, 0xA1, 0x01, 0x09, 0x30, 0x75, 0x08, 0x97, 0xFF, 0xFF, 0xFF, 0xFF,
+                              0x81, 0x02, 0xC0]
+        #expect(throws: HIDDescriptorError.limitExceeded(offset: 10)) {
+            try HIDDescriptorParser().parse(bytes)
+        }
+    }
+
+    @Test func rejectsHugeReportSize() {
+        #expect(throws: HIDDescriptorError.limitExceeded(offset: 0)) {
+            try HIDDescriptorParser().parse([0x77, 0xFF, 0xFF, 0xFF, 0xFF])   // Report Size 0xFFFFFFFF
+        }
+    }
+
+    @Test func rejectsHugeUsageRange() {
+        #expect(throws: HIDDescriptorError.limitExceeded(offset: 2)) {
+            try HIDDescriptorParser().parse([0x19, 0x00, 0x2A, 0xFF, 0xFF])   // Usage Min 0 .. Usage Max 0xFFFF
+        }
+    }
 }
