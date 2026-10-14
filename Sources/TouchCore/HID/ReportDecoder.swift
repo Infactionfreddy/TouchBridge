@@ -31,10 +31,20 @@ public struct TouchFrame: Equatable, Sendable {
 /// Parallel mode: every report carries all contacts and `contactCount` > 0 (or 0 when all lifted).
 /// Hybrid mode: the first report carries `contactCount` = total and the first slots; follow-up reports
 /// carry `contactCount` = 0 and the remaining slots until the total is reached.
+/// Two bounds keep a corrupt or lost report from latching the decoder: counts above `maxContacts`
+/// are dropped, and a hybrid group older than `hybridTimeout` is discarded.
 public struct ReportDecoder: Sendable {
+    /// Contact IDs are 6 bits on the reference device; no HID touch screen reports more contacts than this.
+    /// A report with a larger count is corrupt and is dropped.
+    public static let maxContacts = 64
+
+    /// A hybrid group's continuation reports arrive within one report interval; a group older than this is stale and dropped.
+    public static let hybridTimeout: UInt64 = 100_000_000
+
     public let layout: TouchScreenLayout
     private var pending: [RawContact] = []
     private var expected = 0
+    private var pendingSince: UInt64 = 0
 
     public init(layout: TouchScreenLayout) {
         self.layout = layout
@@ -43,10 +53,20 @@ public struct ReportDecoder: Sendable {
     /// `payload` excludes the report ID byte. Returns nil for short payloads and incomplete hybrid groups.
     public mutating func decode(payload: [UInt8], timestamp: UInt64) -> TouchFrame? {
         guard payload.count >= layout.payloadByteCount else { return nil }
+        if expected > 0 && timestamp > pendingSince && timestamp - pendingSince > Self.hybridTimeout {
+            pending = []
+            expected = 0
+        }
         let reported = Int(Self.value(of: layout.contactCount, in: payload))
+        if reported > Self.maxContacts {
+            pending = []
+            expected = 0
+            return nil
+        }
         if reported > 0 {
             pending = []
             expected = reported
+            pendingSince = timestamp
         } else if expected == 0 {
             return TouchFrame(timestamp: timestamp, contacts: [])
         }

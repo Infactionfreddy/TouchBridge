@@ -70,4 +70,18 @@ import Testing
         let frame = decoder.decode(payload: payload, timestamp: 9)
         #expect(frame == TouchFrame(timestamp: 9, contacts: [RawContact(id: 5, x: 0x123, y: 0x45, down: true)]))
     }
+
+    @Test func oversizedCountIsDroppedAndDoesNotLatch() throws {
+        var decoder = ReportDecoder(layout: try Fixtures.elanLayout())
+        let tenSlots = (0..<10).map { ElanReport.Slot(id: $0, x: $0, y: 0, down: true) }
+        #expect(decoder.decode(payload: ElanReport.payload(contacts: tenSlots, count: 255), timestamp: 1) == nil)
+        #expect(decoder.decode(payload: ElanReport.payload(contacts: [], count: 0), timestamp: 2) == TouchFrame(timestamp: 2, contacts: []))
+    }
+
+    @Test func staleHybridGroupIsDroppedOnTimeout() throws {
+        var decoder = ReportDecoder(layout: try Fixtures.elanLayout())
+        let tenSlots = (0..<10).map { ElanReport.Slot(id: $0, x: $0, y: 0, down: true) }
+        #expect(decoder.decode(payload: ElanReport.payload(contacts: tenSlots, count: 12), timestamp: 1_000_000) == nil)
+        #expect(decoder.decode(payload: ElanReport.payload(contacts: [], count: 0), timestamp: 201_000_000) == TouchFrame(timestamp: 201_000_000, contacts: []))
+    }
 }
