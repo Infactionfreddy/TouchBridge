@@ -65,6 +65,7 @@ final class AppState {
     }
 
     func refreshPermissions() {
+        let wasGranted = inputMonitoringGranted && accessibilityGranted
         let input = permissions.inputMonitoringGranted()
         let ax = permissions.accessibilityGranted()
         if input != inputMonitoringGranted || ax != accessibilityGranted {
@@ -73,16 +74,20 @@ final class AppState {
         inputMonitoringGranted = input
         accessibilityGranted = ax
         if allPermissionsGranted {
-            if controller == nil { startController() } else { controller?.start() }
-        } else if let controller {
+            if controller == nil { startController() } else if controller?.isPaused == true { controller?.start() }
+        } else if wasGranted, let controller {
             controller.pause()
+            liveContacts = []
             showPermissions()
         }
     }
 
     private func startController() {
         let controller = PipelineController(settings: settings)
-        controller.onStatus = { [weak self] status in self?.deviceStatus = status }
+        controller.onStatus = { [weak self] status in
+            self?.deviceStatus = status
+            if status == .none { self?.liveContacts = [] }
+        }
         controller.onContacts = { [weak self] _, contacts in self?.liveContacts = contacts }
         self.controller = controller
         displays = controller.availableDisplays()

@@ -27,6 +27,7 @@ final class PipelineController {
     private let displays = DisplayResolver()
     private var deviceManager: DeviceManager?
     private var settings: Settings
+    private(set) var isPaused = false
     private var wakeObserver: NSObjectProtocol?
 
     init(settings: Settings) {
@@ -34,6 +35,7 @@ final class PipelineController {
     }
 
     func start() {
+        isPaused = false
         guard deviceManager == nil else { return }
         displays.startObserving { [weak self] in self?.remapAll() }
         if wakeObserver == nil {
@@ -57,8 +59,13 @@ final class PipelineController {
         logger.info("controller started")
     }
 
-    /// Stops the device manager and all pipelines; `start()` brings them back.
+    /// Stops the device manager and all pipelines and stays stopped (also across wake) until `start()`.
     func pause() {
+        stopAll()
+        isPaused = true
+    }
+
+    private func stopAll() {
         deviceManager?.stop()
         deviceManager = nil
         for pipeline in registry.removeAll() { pipeline.shutdown() }
@@ -66,12 +73,14 @@ final class PipelineController {
     }
 
     func restart() {
+        guard !isPaused else { return }
         logger.info("restarting after wake")
-        pause()
+        stopAll()
         // Devices re-enumerate after wake; reopen them a moment later.
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(1))
-            self?.start()
+            guard let self, !self.isPaused else { return }
+            self.start()
         }
     }
 
