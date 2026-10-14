@@ -21,7 +21,7 @@ Scripts/build-app.sh          # builds and signs dist/TouchBridge.app
 Scripts/install.sh            # copies to ~/Applications and launches
 ```
 
-On first launch grant **Input Monitoring** and **Accessibility** in the window that opens. The status updates by itself.
+On first launch grant **Input Monitoring** and **Accessibility** in the window that opens. The status updates by itself. macOS may ask you to Quit & Reopen the app after granting Input Monitoring.
 
 ## Gestures (default set)
 
@@ -41,7 +41,7 @@ On first launch grant **Input Monitoring** and **Accessibility** in the window t
 
 ## Settings
 
-`~/Library/Application Support/TouchBridge/settings.json`, editable while the app runs ("Open settings file" in the menu). Keys: `enabled`, `displaySelection` (`{"auto":{}}` or `{"display":{"uuid":"…"}}`), `naturalScrolling`, `gesture` (thresholds in seconds and points), `calibrations` (per device serial: `orientation` 0/90/180/270, `scaleX`, `scaleY`, `offsetX`, `offsetY`), `launchAtLogin`.
+`~/Library/Application Support/TouchBridge/settings.json`, editable while the app runs ("Open settings file" in the menu). Keys: `schemaVersion` (always 1, written by the app), `enabled`, `displaySelection` (`{"auto":{}}` or `{"display":{"uuid":"…"}}`), `naturalScrolling`, `gesture` (thresholds in seconds and points), `calibrations` (per device serial: `orientation` 0/90/180/270, `scaleX`, `scaleY`, `offsetX`, `offsetY`), `launchAtLogin`. Out-of-range gesture values are clamped when the file is read (durations to 0–10 s, `momentumDecayPerFrame` to 0–0.999, `rotateThreshold` to 0–180°, distances and velocities to ≥ 0); `orientation` is reduced modulo 360 and becomes 0 unless it is 0, 90, 180 or 270.
 
 ## Troubleshooting
 
@@ -59,7 +59,7 @@ swift test
 swift run hidrecord --seconds 10 --out capture.jsonl   # record raw reports of your screen
 ```
 
-First run on new hardware: run the seize spike with the panel connected.
+First run on new hardware: run the seize spike with the panel connected. Quit TouchBridge first (two seizers make the spike report `shared`).
 
 ```
 swift run hidrecord --seconds 12 --out Tests/TouchCoreTests/Fixtures/elan-two-finger.jsonl

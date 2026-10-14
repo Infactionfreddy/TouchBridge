@@ -16,19 +16,31 @@ struct Options {
     var out: String?
 }
 
+/// Prints `message` and the usage to stderr and exits with status 2.
+func fail(_ message: String) -> Never {
+    FileHandle.standardError.write(Data("hidrecord: \(message)\n\(usage)\n".utf8))
+    exit(2)
+}
+
 var options = Options()
 var iterator = CommandLine.arguments.dropFirst().makeIterator()
 while let argument = iterator.next() {
     switch argument {
     case "--shared": options.shared = true
-    case "--seconds": options.seconds = iterator.next().flatMap(Double.init)
-    case "--out": options.out = iterator.next()
+    case "--seconds":
+        guard let value = iterator.next() else { fail("--seconds needs a value") }
+        guard let seconds = Double(value), seconds.isFinite, seconds > 0 else {
+            fail("--seconds needs a positive number, got '\(value)'")
+        }
+        options.seconds = seconds
+    case "--out":
+        guard let path = iterator.next() else { fail("--out needs a file path") }
+        options.out = path
     case "-h", "--help":
         print(usage)
         exit(0)
     default:
-        print("unknown argument: \(argument)\n\(usage)")
-        exit(2)
+        fail("unknown argument: \(argument)")
     }
 }
 
@@ -52,10 +64,12 @@ final class Recorder: @unchecked Sendable {
         }
     }
 
-    init(outputPath: String?) {
+    /// Fails when `outputPath` cannot be created or opened for writing (for example, its directory does not exist).
+    init?(outputPath: String?) {
         if let outputPath {
             FileManager.default.createFile(atPath: outputPath, contents: nil)
-            output = FileHandle(forWritingAtPath: outputPath)
+            guard let handle = FileHandle(forWritingAtPath: outputPath) else { return nil }
+            output = handle
         } else {
             output = nil
         }
@@ -111,7 +125,10 @@ final class Recorder: @unchecked Sendable {
     }
 }
 
-let recorder = Recorder(outputPath: options.out)
+guard let recorder = Recorder(outputPath: options.out) else {
+    FileHandle.standardError.write(Data("hidrecord: cannot write to \(options.out ?? "")\n".utf8))
+    exit(2)
+}
 let manager = DeviceManager(preferExclusive: !options.shared, sink: recorder.handle)
 print("waiting for a touch screen (usage page 0x0D / usage 0x04)… Ctrl-C to stop")
 manager.start()

@@ -5,6 +5,8 @@ cd "$(dirname "$0")/.."
 [ -d dist/TouchBridge.app ] || Scripts/build-app.sh release
 mkdir -p "$HOME/Applications"
 pkill -x TouchBridge || true
+# Wait up to ~5 s for the old instance to exit, so it does not still hold the device when the new one starts.
+for _ in $(seq 1 50); do pgrep -x TouchBridge >/dev/null || break; sleep 0.1; done
 rm -rf "$HOME/Applications/TouchBridge.app"
 cp -R dist/TouchBridge.app "$HOME/Applications/TouchBridge.app"
 open "$HOME/Applications/TouchBridge.app"
