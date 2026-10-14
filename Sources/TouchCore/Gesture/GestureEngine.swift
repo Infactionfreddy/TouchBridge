@@ -14,10 +14,11 @@ public struct GestureEngine: Sendable {
         case scrolling(prevCentroid: CGPoint, prevTime: UInt64, velocity: CGVector)
         case pinching(prevDistance: Double, last: CGPoint)
         case rotating(prevAngle: Double, last: CGPoint)
+        /// Three or four fingers are down and may still become a swipe. Losing a finger ends it in `.consumed` (see `finishMulti`).
         case multiPending(count: Int, startCentroid: CGPoint, startTime: UInt64)
         /// One finger is still down after a two-finger gesture ended; it is inert (no drag, no tap) until the count changes.
-    case oneRemaining
-    /// Fingers are down but nothing more will be recognized until all lift.
+        case oneRemaining
+        /// Fingers are down but nothing more will be recognized until all lift.
         case consumed
     }
 
@@ -177,6 +178,8 @@ public struct GestureEngine: Sendable {
         return (actions, true)
     }
 
+    /// Ends a pending three/four-finger gesture. Fewer fingers (also 3 → 2) go to `.consumed` by design:
+    /// lifting one finger of a swipe must not start a scroll or pinch with the remaining two.
     private mutating func finishMulti(newCount n: Int) -> ([Action], Bool) {
         guard case .multiPending(let count, _, _) = state else { return ([], false) }
         if n == 0 { state = .idle; return ([], false) }

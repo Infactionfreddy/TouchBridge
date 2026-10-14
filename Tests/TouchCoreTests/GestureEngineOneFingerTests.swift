@@ -101,4 +101,14 @@ import CoreGraphics
         let roundTrip = try JSONDecoder().decode(GestureConfig.self, from: JSONEncoder().encode(GestureConfig()))
         #expect(roundTrip == GestureConfig())
     }
+
+    @Test func configClampsHostileValues() throws {
+        let json = #"{"stuckTimeout": -1, "momentumDecayPerFrame": 2, "tapMaxMovement": -5, "longPressDuration": 1e12}"#
+        let decoded = try JSONDecoder().decode(GestureConfig.self, from: Data(json.utf8))
+        #expect(decoded.stuckTimeout == 0)
+        #expect(decoded.momentumDecayPerFrame == 0.999)
+        #expect(decoded.tapMaxMovement == 0)
+        #expect(decoded.longPressDuration == 10)
+        #expect(decoded.swipeDistance == GestureConfig().swipeDistance)
+    }
 }

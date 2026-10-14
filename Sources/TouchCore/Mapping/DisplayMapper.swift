@@ -18,13 +18,25 @@ public struct Calibration: Codable, Equatable, Sendable {
         self.offsetY = offsetY
     }
 
+    /// Hand-edited values are normalised: see `normalisedOrientation`; non-finite scales and offsets take the default.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        orientation = try c.decodeIfPresent(Int.self, forKey: .orientation) ?? 0
-        scaleX = try c.decodeIfPresent(Double.self, forKey: .scaleX) ?? 1
-        scaleY = try c.decodeIfPresent(Double.self, forKey: .scaleY) ?? 1
-        offsetX = try c.decodeIfPresent(Double.self, forKey: .offsetX) ?? 0
-        offsetY = try c.decodeIfPresent(Double.self, forKey: .offsetY) ?? 0
+        func read(_ key: CodingKeys, default fallback: Double) throws -> Double {
+            let value = try c.decodeIfPresent(Double.self, forKey: key) ?? fallback
+            return value.isFinite ? value : fallback
+        }
+        orientation = Self.normalisedOrientation(try c.decodeIfPresent(Int.self, forKey: .orientation) ?? 0)
+        scaleX = try read(.scaleX, default: 1)
+        scaleY = try read(.scaleY, default: 1)
+        offsetX = try read(.offsetX, default: 0)
+        offsetY = try read(.offsetY, default: 0)
+    }
+
+    /// Reduces `degrees` modulo 360 (450 → 90, -90 → 270). A result that is not 0, 90, 180 or 270 becomes 0;
+    /// it is not rounded to the nearest quarter turn.
+    static func normalisedOrientation(_ degrees: Int) -> Int {
+        let reduced = ((degrees % 360) + 360) % 360
+        return [0, 90, 180, 270].contains(reduced) ? reduced : 0
     }
 }
 

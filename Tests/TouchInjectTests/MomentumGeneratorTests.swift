@@ -27,4 +27,15 @@ import CoreGraphics
         let g = MomentumGenerator(decayPerFrame: 1.0, stopVelocity: 20, frameRate: 60, maxFrames: 50)
         #expect(g.frames(initialVelocity: CGVector(dx: 0, dy: 600)).count == 50)
     }
+
+    @Test func hostileParametersAreClamped() {
+        let g = MomentumGenerator(decayPerFrame: 2, stopVelocity: 20, frameRate: 0)
+        #expect(g.decayPerFrame == 0.999)
+        #expect(g.frameRate == 60)
+        let frames = g.frames(initialVelocity: CGVector(dx: 0, dy: 600))
+        #expect(!frames.isEmpty)
+        #expect(frames.count <= g.maxFrames)
+        #expect(frames.allSatisfy { $0.dx.isFinite && $0.dy.isFinite })
+        #expect(zip(frames, frames.dropFirst()).allSatisfy { $1.dy < $0.dy })   // strictly decaying
+    }
 }

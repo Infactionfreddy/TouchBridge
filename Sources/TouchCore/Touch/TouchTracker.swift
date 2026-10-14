@@ -51,7 +51,8 @@ public struct TouchTracker: Sendable {
             if let index = touches.firstIndex(where: { $0.id == contact.id }) {
                 if contact.down {
                     touches[index].position = contact.position
-                    touches[index].lastUpdate = frame.timestamp
+                    // A late frame with an older timestamp must not make the contact look stale.
+                    touches[index].lastUpdate = max(touches[index].lastUpdate, frame.timestamp)
                     events.append(TouchEvent(id: contact.id, phase: .moved, position: contact.position, timestamp: frame.timestamp))
                     seen.insert(contact.id)
                 } else {

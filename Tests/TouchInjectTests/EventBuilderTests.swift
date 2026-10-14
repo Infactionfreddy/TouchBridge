@@ -29,6 +29,15 @@ import TouchCore
         #expect(m.getIntegerValueField(.scrollWheelEventScrollPhase) == 0)
     }
 
+    @Test func scrollEventClampsHugeAndNaNDeltas() throws {
+        let e = try #require(EventInjector.scrollEvent(delta: CGVector(dx: 1e12, dy: .nan), at: p, phase: .changed, momentum: nil, source: source))
+        #expect(e.getIntegerValueField(.scrollWheelEventPointDeltaAxis2) == Int64(Int32.max))
+        #expect(e.getIntegerValueField(.scrollWheelEventPointDeltaAxis1) == 0)
+        #expect(EventInjector.clampedInt32(-1e12) == Int32.min)
+        #expect(EventInjector.clampedInt32(.infinity) == Int32.max)
+        #expect(EventInjector.clampedInt32(-7.9) == -7)
+    }
+
     @Test func scrollPhaseValues() {
         #expect(EventInjector.scrollPhaseValue(.began) == 1)
         #expect(EventInjector.scrollPhaseValue(.changed) == 2)

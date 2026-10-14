@@ -9,10 +9,12 @@ public struct MomentumGenerator: Sendable {
     public var frameRate: Double
     public var maxFrames: Int
 
+    /// Hostile values never trap or grow the sequence: `decayPerFrame` is clamped to 0…0.999 (NaN becomes 0.96),
+    /// a `frameRate` that is not positive and finite becomes 60.
     public init(decayPerFrame: Double = 0.96, stopVelocity: Double = 20, frameRate: Double = 60, maxFrames: Int = 600) {
-        self.decayPerFrame = decayPerFrame
+        self.decayPerFrame = decayPerFrame.isNaN ? 0.96 : min(max(decayPerFrame, 0), 0.999)
         self.stopVelocity = stopVelocity
-        self.frameRate = frameRate
+        self.frameRate = frameRate > 0 && frameRate.isFinite ? frameRate : 60
         self.maxFrames = maxFrames
     }
 

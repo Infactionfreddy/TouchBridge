@@ -57,6 +57,15 @@ import Testing
         #expect(tracker.touches.count == 1)
     }
 
+    @Test func olderFrameDoesNotRegressLastUpdate() {
+        var tracker = TouchTracker(stuckTimeout: ms(500))
+        _ = tracker.process(frame(ms(1000), [(1, 10, 10, true)]))
+        _ = tracker.process(frame(ms(200), [(1, 11, 10, true)]))
+        #expect(tracker.tick(ms(800)).isEmpty)
+        #expect(tracker.touches.count == 1)
+        #expect(tracker.touches[0].lastUpdate == ms(1000))
+    }
+
     @Test func touchesKeepArrivalOrder() {
         var tracker = TouchTracker(stuckTimeout: ms(500))
         _ = tracker.process(frame(ms(0), [(7, 10, 10, true)]))

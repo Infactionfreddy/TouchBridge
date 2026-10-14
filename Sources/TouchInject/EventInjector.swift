@@ -131,13 +131,19 @@ public final class EventInjector: @unchecked Sendable {
 
     static func scrollEvent(delta: CGVector, at p: CGPoint, phase: GesturePhase?, momentum: Int64?, source: CGEventSource?) -> CGEvent? {
         guard let event = CGEvent(scrollWheelEvent2Source: source, units: .pixel, wheelCount: 2,
-                                  wheel1: Int32(delta.dy), wheel2: Int32(delta.dx), wheel3: 0) else { return nil }
+                                  wheel1: clampedInt32(delta.dy), wheel2: clampedInt32(delta.dx), wheel3: 0) else { return nil }
         event.location = p
         event.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
         if let phase { event.setIntegerValueField(.scrollWheelEventScrollPhase, value: scrollPhaseValue(phase)) }
         if let momentum { event.setIntegerValueField(.scrollWheelEventMomentumPhase, value: momentum) }
         event.setIntegerValueField(.eventSourceUserData, value: marker)
         return event
+    }
+
+    /// A wheel delta as `Int32`, truncated toward zero and saturated at the type's bounds instead of trapping; NaN becomes 0.
+    static func clampedInt32(_ x: Double) -> Int32 {
+        guard !x.isNaN else { return 0 }
+        return Int32(min(max(x, Double(Int32.min)), Double(Int32.max)))
     }
 
     static func scrollPhaseValue(_ phase: GesturePhase) -> Int64 {

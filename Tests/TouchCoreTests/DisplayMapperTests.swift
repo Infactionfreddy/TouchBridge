@@ -1,4 +1,5 @@
 import Testing
+import Foundation
 import CoreGraphics
 @testable import TouchCore
 
@@ -50,5 +51,15 @@ import CoreGraphics
         let m = mapper()
         let out = m.map(TouchFrame(timestamp: 7, contacts: [RawContact(id: 2, x: 0, y: 1680, down: true)]))
         #expect(out == ScreenFrame(timestamp: 7, contacts: [Contact(id: 2, position: CGPoint(x: 3024, y: 1080), down: true)]))
+    }
+
+    @Test func orientationIsNormalised() throws {
+        func decode(_ json: String) throws -> Calibration {
+            try JSONDecoder().decode(Calibration.self, from: Data(json.utf8))
+        }
+        #expect(try decode(#"{"orientation": 450}"#).orientation == 90)
+        #expect(try decode(#"{"orientation": 45}"#).orientation == 0)
+        #expect(try decode(#"{"orientation": -90}"#).orientation == 270)
+        #expect(try decode(#"{"orientation": 180, "scaleX": 2}"#) == Calibration(orientation: 180, scaleX: 2))
     }
 }
