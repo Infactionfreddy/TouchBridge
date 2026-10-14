@@ -16,6 +16,13 @@ final class DisplayResolver {
 
     private var onChange: (() -> Void)?
     private var pending: Task<Void, Never>?
+    private var observing = false
+
+    deinit {
+        if observing {
+            CGDisplayRemoveReconfigurationCallback(displayReconfigured, Unmanaged.passUnretained(self).toOpaque())
+        }
+    }
 
     func allDisplays() -> [DisplayDescription] {
         var count: UInt32 = 0
@@ -41,18 +48,16 @@ final class DisplayResolver {
         return displays.first { !$0.isBuiltin } ?? displays.first
     }
 
+    /// Replaces the change handler; the CoreGraphics callback is registered only on the first call.
     func startObserving(_ onChange: @escaping () -> Void) {
         self.onChange = onChange
-        let context = Unmanaged.passUnretained(self).toOpaque()
-        CGDisplayRegisterReconfigurationCallback({ _, _, context in
-            guard let context else { return }
-            let resolver = Unmanaged<DisplayResolver>.fromOpaque(context).takeUnretainedValue()
-            Task { @MainActor in resolver.scheduleChange() }
-        }, context)
+        guard !observing else { return }
+        observing = true
+        CGDisplayRegisterReconfigurationCallback(displayReconfigured, Unmanaged.passUnretained(self).toOpaque())
     }
 
     /// Coalesces the burst of callbacks a reconfiguration produces into one `onChange` 300 ms after the last one.
-    private func scheduleChange() {
+    fileprivate func scheduleChange() {
         pending?.cancel()
         pending = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(300))
@@ -71,4 +76,13 @@ final class DisplayResolver {
         let screen = NSScreen.screens.first { ($0.deviceDescription[key] as? NSNumber)?.uint32Value == id }
         return screen?.localizedName ?? "Display \(id)"
     }
+}
+
+/// CoreGraphics display reconfiguration callback. A file-scope function is nonisolated, so it is safe on whatever
+/// thread CoreGraphics calls it from; it only hops to the main actor.
+private func displayReconfigured(_ display: CGDirectDisplayID, _ flags: CGDisplayChangeSummaryFlags,
+                                 _ context: UnsafeMutableRawPointer?) {
+    guard let context else { return }
+    let resolver = Unmanaged<DisplayResolver>.fromOpaque(context).takeUnretainedValue()
+    Task { @MainActor in resolver.scheduleChange() }
 }

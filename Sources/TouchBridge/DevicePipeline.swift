@@ -95,10 +95,10 @@ final class DevicePipeline: @unchecked Sendable {
     private func tick() {
         let now = DispatchTime.now().uptimeNanoseconds
         let expired = tracker.tick(now)
-        if !expired.isEmpty {
-            logger.info("ended \(expired.count) stuck contact(s)")
-            run(engine.update(touches: tracker.touches, timestamp: now))
-        }
+        if !expired.isEmpty { logger.info("ended \(expired.count) stuck contact(s)") }
+        // Stuck contacts expire even while touch is off, but the engine must not be fed then.
+        guard enabled else { updateTickTimer(); return }
+        if !expired.isEmpty { run(engine.update(touches: tracker.touches, timestamp: now)) }
         run(engine.tick(now))
         updateTickTimer()
     }

@@ -92,6 +92,8 @@ final class PipelineController {
                 pipeline.onContacts = { [weak self] contacts in
                     Task { @MainActor in self?.onContacts?(id, contacts) }
                 }
+                // A re-matched device can be attached again without a detach: end the old pipeline's gestures first.
+                registry.remove(id)?.shutdown()
                 registry.set(pipeline, for: id)
                 let problem: String?
                 switch mode {
@@ -104,7 +106,8 @@ final class PipelineController {
                 onStatus?(.attached(name: info.product, exclusive: mode.isExclusive, problem: problem))
                 logger.info("pipeline ready for \(info.product, privacy: .public) (\(layout.slots.count) slots)")
             } catch {
-                logger.error("descriptor of \(info.product, privacy: .public) unusable: \(String(describing: error), privacy: .public)")
+                let hex = info.descriptor.map { String(format: "%02x", $0) }.joined()
+                logger.error("descriptor of \(info.product, privacy: .public) unusable: \(String(describing: error), privacy: .public); bytes: \(hex, privacy: .public)")
                 onStatus?(.openFailed(name: "\(info.product) (descriptor)"))
             }
         case .openFailed(_, let info, let status):
