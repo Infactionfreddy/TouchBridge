@@ -15,7 +15,9 @@ public struct GestureEngine: Sendable {
         case pinching(prevDistance: Double, last: CGPoint)
         case rotating(prevAngle: Double, last: CGPoint)
         case multiPending(count: Int, startCentroid: CGPoint, startTime: UInt64)
-        /// Fingers are down but nothing more will be recognized until all lift.
+        /// One finger is still down after a two-finger gesture ended; it is inert (no drag, no tap) until the count changes.
+    case oneRemaining
+    /// Fingers are down but nothing more will be recognized until all lift.
         case consumed
     }
 
@@ -63,7 +65,7 @@ public struct GestureEngine: Sendable {
                 return [.click(button: .right, at: last, count: 1)]
             }
         case .twoReleasing(_, let startTime):
-            if Geometry.seconds(from: startTime, to: timestamp) > config.tapMaxDuration { state = .consumed }
+            if Geometry.seconds(from: startTime, to: timestamp) > config.tapMaxDuration { state = .oneRemaining }
         case .multiPending(_, _, let startTime):
             if Geometry.seconds(from: startTime, to: timestamp) > config.swipeMaxDuration { state = .consumed }
         default:
@@ -94,7 +96,7 @@ public struct GestureEngine: Sendable {
     private var expectedCount: Int {
         switch state {
         case .idle: return 0
-        case .oneFinger, .dragging, .twoReleasing: return 1
+        case .oneFinger, .dragging, .twoReleasing, .oneRemaining: return 1
         case .twoPending, .scrolling, .pinching, .rotating: return 2
         case .multiPending(let count, _, _): return count
         case .consumed: return -1
@@ -119,6 +121,9 @@ public struct GestureEngine: Sendable {
             return finishTwoFinger(newCount: n, timestamp: timestamp)
         case .multiPending:
             return finishMulti(newCount: n)
+        case .oneRemaining:
+            state = .idle
+            return ([], n >= 2)
         case .consumed:
             state = n == 0 ? .idle : .consumed
             return ([], false)
@@ -167,7 +172,7 @@ public struct GestureEngine: Sendable {
     /// After a two-finger gesture ended with `n` fingers remaining: none → idle, one → consumed, three or more → re-enter.
     private mutating func settle(after n: Int, _ actions: [Action]) -> ([Action], Bool) {
         if n == 0 { state = .idle; return (actions, false) }
-        if n == 1 { state = .consumed; return (actions, false) }
+        if n == 1 { state = .oneRemaining; return (actions, false) }
         state = .idle
         return (actions, true)
     }
@@ -220,7 +225,7 @@ public struct GestureEngine: Sendable {
 
     private mutating func continueGesture(_ touches: [ActiveTouch], _ timestamp: UInt64) -> [Action] {
         switch state {
-        case .idle, .consumed, .twoReleasing:
+        case .idle, .consumed, .twoReleasing, .oneRemaining:
             return []
         case .oneFinger(let id, let start, _, let startTime):
             let p = touches[0].position

@@ -159,4 +159,50 @@ import CoreGraphics
         _ = e.update(touches: pair(100, 115, 140, 115), timestamp: ms(30))
         #expect(e.reset() == [.scroll(phase: .ended, delta: .zero, at: pt(120, 115))])
     }
+
+    @Test func staggeredTwoFingerTapWithIntermediateFrames() {
+        var e = GestureEngine()
+        #expect(e.update(touches: [touch(1, 100, 100)], timestamp: ms(0)) == [.moveCursor(to: pt(100, 100))])
+        #expect(e.update(touches: pair(100, 100, 140, 100), timestamp: ms(40)).isEmpty)
+        #expect(e.update(touches: [touch(2, 140, 100)], timestamp: ms(120)).isEmpty)
+        #expect(e.update(touches: [touch(2, 140, 100)], timestamp: ms(128)).isEmpty)
+        #expect(e.update(touches: [touch(2, 140, 100)], timestamp: ms(136)).isEmpty)
+        #expect(e.update(touches: [], timestamp: ms(150)) == [.click(button: .right, at: pt(120, 100), count: 1)])
+        #expect(e.isIdle)
+    }
+
+    @Test func resetClearsMomentumFlag() throws {
+        var e = GestureEngine()
+        _ = e.update(touches: pair(100, 100, 140, 100), timestamp: ms(0))
+        _ = e.update(touches: pair(100, 115, 140, 115), timestamp: ms(30))
+        let lift = e.update(touches: [], timestamp: ms(60))
+        try #require(lift.count == 2)
+        #expect(e.reset().isEmpty)
+        #expect(e.update(touches: [touch(5, 300, 300)], timestamp: ms(200)) == [.moveCursor(to: pt(300, 300))])
+    }
+
+    @Test func pinchThenScrollAfterReplacingOneFinger() throws {
+        var e = GestureEngine()
+        #expect(e.update(touches: pair(100, 100, 140, 100), timestamp: ms(0)).isEmpty)
+        let pinch = e.update(touches: pair(90, 100, 160, 100), timestamp: ms(30))
+        try #require(pinch.count == 2)
+        #expect(pinch[0] == .magnify(phase: .began, delta: 0, at: pt(125, 100)))
+        #expect(e.update(touches: [touch(2, 160, 100)], timestamp: ms(60)) == [.magnify(phase: .ended, delta: 0, at: pt(125, 100))])
+        #expect(e.update(touches: [touch(2, 160, 100)], timestamp: ms(80)).isEmpty)
+        #expect(e.update(touches: [touch(2, 160, 100), touch(3, 200, 100)], timestamp: ms(100)).isEmpty)
+        #expect(e.update(touches: [touch(2, 160, 115), touch(3, 200, 115)], timestamp: ms(130)) == [
+            .scroll(phase: .began, delta: .zero, at: pt(180, 115)),
+            .scroll(phase: .changed, delta: CGVector(dx: 0, dy: 15), at: pt(180, 115)),
+        ])
+    }
+
+    @Test func newFingerAfterScrollLiftCancelsMomentum() throws {
+        var e = GestureEngine()
+        _ = e.update(touches: pair(100, 100, 140, 100), timestamp: ms(0))
+        _ = e.update(touches: pair(100, 115, 140, 115), timestamp: ms(30))
+        let out = e.update(touches: [touch(2, 140, 115)], timestamp: ms(60))
+        try #require(out.count == 2)
+        #expect(out[0] == .scroll(phase: .ended, delta: .zero, at: pt(120, 115)))
+        #expect(e.update(touches: [touch(2, 140, 115), touch(7, 180, 115)], timestamp: ms(90)) == [.cancelMomentum])
+    }
 }
