@@ -31,10 +31,13 @@ public final class DeviceManager: @unchecked Sendable {
     private let sink: Sink
     private let preferExclusive: Bool
     private let logger = Logger(subsystem: "org.touchbridge", category: "device")
+    /// Guards all lifecycle state below.
     private let lock = NSLock()
+    private var running = false
     private var manager: IOHIDManager?
     private var runLoop: CFRunLoop?
     private var thread: Thread?
+    private var finished: DispatchSemaphore?
     private var entries: [DeviceID: Entry] = [:]
 
     public init(preferExclusive: Bool = true, sink: @escaping Sink) {
@@ -42,11 +45,16 @@ public final class DeviceManager: @unchecked Sendable {
         self.sink = sink
     }
 
+    /// Starts the HID thread and returns once the manager is scheduled. Calling it while running is a no-op.
     public func start() {
+        let ready = DispatchSemaphore(value: 0)
+        let finished = DispatchSemaphore(value: 0)
         let thread = Thread { [self] in
             let manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
-            self.manager = manager
-            self.runLoop = CFRunLoopGetCurrent()
+            lock.withLock {
+                self.manager = manager
+                self.runLoop = CFRunLoopGetCurrent()
+            }
             let matching: [String: Any] = [
                 kIOHIDPrimaryUsagePageKey: Int(HIDUsage.touchScreen.page),
                 kIOHIDPrimaryUsageKey: Int(HIDUsage.touchScreen.id),
@@ -64,48 +72,82 @@ public final class DeviceManager: @unchecked Sendable {
             IOHIDManagerScheduleWithRunLoop(manager, CFRunLoopGetCurrent(), CFRunLoopMode.defaultMode.rawValue)
             // IOHIDManagerOpen is deliberately not called: devices are opened one by one so that each can be seized.
             self.logger.info("HID manager scheduled")
+            ready.signal()
             CFRunLoopRun()
+            lock.withLock {
+                self.manager = nil
+                self.runLoop = nil
+            }
             self.logger.info("HID thread finished")
+            finished.signal()
         }
         thread.name = "org.touchbridge.hid"
         thread.qualityOfService = .userInteractive
-        self.thread = thread
+        let shouldStart = lock.withLock {
+            if running { return false }
+            running = true
+            self.thread = thread
+            self.finished = finished
+            return true
+        }
+        guard shouldStart else { return }
         thread.start()
+        ready.wait()
     }
 
+    /// Synchronous: returns after the HID thread has exited; no sink call happens after it returns.
+    /// Must not be called from the sink (it runs on the HID thread).
     public func stop() {
-        guard let runLoop, let manager else { return }
+        let state = lock.withLock { running ? (runLoop, manager, finished) : nil }
+        guard let (runLoop, manager, finished) = state, let runLoop, let manager, let finished else { return }
         CFRunLoopPerformBlock(runLoop, CFRunLoopMode.defaultMode.rawValue) { [self] in
-            let current = lock.withLock { entries }
-            for (_, entry) in current {
-                IOHIDDeviceRegisterInputReportCallback(entry.device, entry.buffer, entry.bufferSize, nil, nil)
-                IOHIDDeviceClose(entry.device, IOOptionBits(kIOHIDOptionsTypeNone))
+            let current = lock.withLock { () -> [Entry] in
+                let all = Array(entries.values)
+                entries.removeAll()
+                return all
             }
-            lock.withLock { entries.removeAll() }
+            for entry in current { tearDown(entry) }
             IOHIDManagerUnscheduleFromRunLoop(manager, runLoop, CFRunLoopMode.defaultMode.rawValue)
             IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone))
             CFRunLoopStop(runLoop)
         }
         CFRunLoopWakeUp(runLoop)
-        self.runLoop = nil
-        self.manager = nil
+        finished.wait()
+        lock.withLock {
+            running = false
+            thread = nil
+            self.finished = nil
+        }
+    }
+
+    private func tearDown(_ entry: Entry) {
+        IOHIDDeviceRegisterInputReportCallback(entry.device, entry.buffer, entry.bufferSize, nil, nil)
+        IOHIDDeviceClose(entry.device, IOOptionBits(kIOHIDOptionsTypeNone))
     }
 
     // MARK: - Callbacks (HID thread)
 
     private func deviceMatched(_ device: IOHIDDevice) {
-        let id = Self.registryID(of: device)
+        guard let id = Self.registryID(of: device) else {
+            logger.error("could not resolve the registry ID of a matched device; ignoring it")
+            return
+        }
         let info = Self.info(of: device)
-        var mode = DeviceOpenMode.exclusive
+        var seizeStatus: IOReturn = kIOReturnSuccess
         var status: IOReturn = kIOReturnUnsupported
+        var mode = DeviceOpenMode.exclusive
         if preferExclusive {
             status = IOHIDDeviceOpen(device, IOOptionBits(kIOHIDOptionsTypeSeizeDevice))
+            seizeStatus = status
             if status != kIOReturnSuccess {
+                if status == kIOReturnNotPermitted {
+                    logger.error("input monitoring not granted")
+                }
                 logger.error("exclusive open of \(info.product, privacy: .public) failed: 0x\(String(UInt32(bitPattern: status), radix: 16), privacy: .public); falling back to shared")
             }
         }
         if status != kIOReturnSuccess {
-            mode = .shared
+            mode = .shared(seizeStatus: preferExclusive ? seizeStatus : kIOReturnUnsupported)
             status = IOHIDDeviceOpen(device, IOOptionBits(kIOHIDOptionsTypeNone))
         }
         guard status == kIOReturnSuccess else {
@@ -114,23 +156,23 @@ public final class DeviceManager: @unchecked Sendable {
             return
         }
         let entry = Entry(device: device, bufferSize: max(info.maxInputReportSize, 64), id: id, manager: self)
-        lock.withLock { entries[id] = entry }
+        let old = lock.withLock { entries.updateValue(entry, forKey: id) }
+        if let old { tearDown(old) }
         let context = Unmanaged.passUnretained(entry).toOpaque()
         IOHIDDeviceRegisterInputReportCallback(device, entry.buffer, entry.bufferSize, { context, _, _, _, reportID, report, length in
             guard let context else { return }
             let entry = Unmanaged<Entry>.fromOpaque(context).takeUnretainedValue()
             entry.manager?.deliver(entry: entry, reportID: UInt8(truncatingIfNeeded: reportID), report: report, length: length)
         }, context)
-        logger.info("attached \(info.product, privacy: .public) serial \(info.serial, privacy: .public) mode \(mode == .exclusive ? "exclusive" : "shared", privacy: .public)")
+        logger.info("attached \(info.product, privacy: .public) serial \(info.serial, privacy: .public) mode \(mode.isExclusive ? "exclusive" : "shared", privacy: .public)")
         sink(.attached(id: id, info: info, mode: mode))
     }
 
     private func deviceRemoved(_ device: IOHIDDevice) {
-        let id = Self.registryID(of: device)
+        guard let id = Self.registryID(of: device) else { return }
         let entry = lock.withLock { entries.removeValue(forKey: id) }
         guard let entry else { return }
-        IOHIDDeviceRegisterInputReportCallback(entry.device, entry.buffer, entry.bufferSize, nil, nil)
-        IOHIDDeviceClose(entry.device, IOOptionBits(kIOHIDOptionsTypeNone))
+        tearDown(entry)
         logger.info("detached device \(id, privacy: .public)")
         sink(.detached(id: id))
     }
@@ -144,12 +186,11 @@ public final class DeviceManager: @unchecked Sendable {
 
     // MARK: - Properties
 
-    private static func registryID(of device: IOHIDDevice) -> DeviceID {
+    private static func registryID(of device: IOHIDDevice) -> DeviceID? {
         var id: UInt64 = 0
         let service = IOHIDDeviceGetService(device)
-        if service != IO_OBJECT_NULL {
-            IORegistryEntryGetRegistryEntryID(service, &id)
-        }
+        guard service != IO_OBJECT_NULL,
+              IORegistryEntryGetRegistryEntryID(service, &id) == KERN_SUCCESS else { return nil }
         return id
     }
 

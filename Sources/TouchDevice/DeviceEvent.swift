@@ -26,7 +26,14 @@ public struct DeviceInfo: Equatable, Sendable {
 }
 
 public enum DeviceOpenMode: Sendable, Equatable {
-    case exclusive, shared
+    case exclusive
+    /// Seize failed with `seizeStatus` (an IOReturn); the device was opened shared instead.
+    case shared(seizeStatus: Int32)
+
+    public var isExclusive: Bool {
+        if case .exclusive = self { return true }
+        return false
+    }
 }
 
 public enum DeviceEvent: Sendable {

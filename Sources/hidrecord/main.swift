@@ -1,4 +1,5 @@
 import Foundation
+import IOKit.hid
 import TouchCore
 import TouchDevice
 
@@ -37,7 +38,19 @@ final class Recorder: @unchecked Sendable {
     private var decoders: [DeviceID: ReportDecoder] = [:]
     private var lastPrint: UInt64 = 0
     private let output: FileHandle?
-    private(set) var reportCount = 0
+    private var reportCount = 0
+    private var finished = false
+
+    static func describe(_ mode: DeviceOpenMode) -> String {
+        switch mode {
+        case .exclusive:
+            return "exclusive"
+        case .shared(let status):
+            let hex = String(UInt32(bitPattern: status), radix: 16)
+            let hint = status == kIOReturnNotPermitted ? " — Input Monitoring not granted" : ""
+            return "shared (seize failed 0x\(hex))\(hint)"
+        }
+    }
 
     init(outputPath: String?) {
         if let outputPath {
@@ -52,14 +65,20 @@ final class Recorder: @unchecked Sendable {
         queue.async { self.process(event) }
     }
 
-    func finish() {
-        queue.sync { try? output?.close() }
+    /// Closes the output and returns the number of reports recorded; later events are ignored.
+    func finish() -> Int {
+        queue.sync {
+            finished = true
+            try? output?.close()
+            return reportCount
+        }
     }
 
     private func process(_ event: DeviceEvent) {
+        if finished { return }
         switch event {
         case .attached(let id, let info, let mode):
-            print("attached: \(info.manufacturer) \(info.product) serial \(info.serial) vid 0x\(String(info.vendorID, radix: 16)) pid 0x\(String(info.productID, radix: 16)) mode=\(mode == .exclusive ? "exclusive" : "shared")")
+            print("attached: \(info.manufacturer) \(info.product) serial \(info.serial) vid 0x\(String(info.vendorID, radix: 16)) pid 0x\(String(info.productID, radix: 16)) mode=\(Self.describe(mode))")
             do {
                 let layout = try TouchScreenLayout(descriptor: HIDDescriptorParser().parse(info.descriptor))
                 layouts[id] = layout
@@ -97,14 +116,21 @@ let manager = DeviceManager(preferExclusive: !options.shared, sink: recorder.han
 print("waiting for a touch screen (usage page 0x0D / usage 0x04)… Ctrl-C to stop")
 manager.start()
 
-signal(SIGINT) { _ in exit(0) }
+func shutdown(reason: String) -> Never {
+    manager.stop()
+    let count = recorder.finish()
+    print("done (\(reason)), \(count) reports")
+    exit(0)
+}
+
+signal(SIGINT, SIG_IGN)
+let sigintSource = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
+sigintSource.setEventHandler { shutdown(reason: "Ctrl-C") }
+sigintSource.resume()
 
 if let seconds = options.seconds {
     DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
-        manager.stop()
-        recorder.finish()
-        print("done after \(seconds)s, \(recorder.reportCount) reports")
-        exit(0)
+        shutdown(reason: "\(seconds)s")
     }
 }
 RunLoop.main.run()
