@@ -50,7 +50,9 @@ public struct GestureEngine: Sendable {
             return continueGesture(touches, timestamp)
         }
         let (actions, enter) = finishGesture(newCount: n, timestamp: timestamp)
-        return enter ? actions + self.enter(touches, timestamp) : actions
+        if enter { return actions + self.enter(touches, timestamp) }
+        trackedIDs = Set(touches.map(\.id))
+        return actions
     }
 
     public mutating func tick(_ timestamp: UInt64) -> [Action] {
@@ -83,6 +85,7 @@ public struct GestureEngine: Sendable {
         state = .idle
         lastTap = nil
         trackedIDs = []
+        momentumMayBeRunning = false
         return actions
     }
 
@@ -122,10 +125,51 @@ public struct GestureEngine: Sendable {
         }
     }
 
-    // Replaced in Task 8.
     private mutating func finishTwoFinger(newCount n: Int, timestamp: UInt64) -> ([Action], Bool) {
-        state = n == 0 ? .idle : .consumed
-        return ([], false)
+        switch state {
+        case .twoPending(let c, _, _, let startTime, _):
+            if n == 0 {
+                state = .idle
+                let isTap = Geometry.seconds(from: startTime, to: timestamp) <= config.tapMaxDuration
+                return (isTap ? [.click(button: .right, at: c, count: 1)] : [], false)
+            }
+            if n == 1 {
+                state = .twoReleasing(startCentroid: c, startTime: startTime)
+                return ([], false)
+            }
+            state = .idle
+            return ([], true)
+        case .twoReleasing(let c, let startTime):
+            if n == 0 {
+                state = .idle
+                let isTap = Geometry.seconds(from: startTime, to: timestamp) <= config.tapMaxDuration
+                return (isTap ? [.click(button: .right, at: c, count: 1)] : [], false)
+            }
+            state = .idle
+            return ([], true)
+        case .scrolling(let prev, _, let v):
+            var out: [Action] = [.scroll(phase: .ended, delta: .zero, at: prev)]
+            if hypot(v.dx, v.dy) >= config.momentumMinVelocity {
+                out.append(.scrollMomentum(velocity: v, at: prev))
+                momentumMayBeRunning = true
+            }
+            return settle(after: n, out)
+        case .pinching(_, let last):
+            return settle(after: n, [.magnify(phase: .ended, delta: 0, at: last)])
+        case .rotating(_, let last):
+            return settle(after: n, [.rotate(phase: .ended, degrees: 0, at: last)])
+        default:
+            state = n == 0 ? .idle : .consumed
+            return ([], false)
+        }
+    }
+
+    /// After a two-finger gesture ended with `n` fingers remaining: none → idle, one → consumed, three or more → re-enter.
+    private mutating func settle(after n: Int, _ actions: [Action]) -> ([Action], Bool) {
+        if n == 0 { state = .idle; return (actions, false) }
+        if n == 1 { state = .consumed; return (actions, false) }
+        state = .idle
+        return (actions, true)
     }
 
     // Replaced in Task 9.
@@ -158,9 +202,13 @@ public struct GestureEngine: Sendable {
         return out
     }
 
-    // Replaced in Task 8.
     private mutating func enterTwoFinger(_ touches: [ActiveTouch], _ timestamp: UInt64) {
-        state = .consumed
+        let c = Geometry.centroid(touches)
+        state = .twoPending(startCentroid: c,
+                            startDistance: Geometry.pairDistance(touches),
+                            startAngle: Geometry.pairAngle(touches),
+                            startTime: timestamp,
+                            last: c)
     }
 
     // Replaced in Task 9.
@@ -197,9 +245,48 @@ public struct GestureEngine: Sendable {
         }
     }
 
-    // Replaced in Task 8.
     private mutating func continueTwoFinger(_ touches: [ActiveTouch], _ timestamp: UInt64) -> [Action] {
-        []
+        let c = Geometry.centroid(touches)
+        let d = Geometry.pairDistance(touches)
+        let a = Geometry.pairAngle(touches)
+        switch state {
+        case .twoPending(let c0, let d0, let a0, let startTime, _):
+            if abs(d - d0) >= config.pinchThreshold {
+                state = .pinching(prevDistance: d, last: c)
+                return [.magnify(phase: .began, delta: 0, at: c),
+                        .magnify(phase: .changed, delta: d0 > 0 ? d / d0 - 1 : 0, at: c)]
+            }
+            let da = Geometry.angleDelta(from: a0, to: a)
+            if abs(da) >= config.rotateThreshold {
+                state = .rotating(prevAngle: a, last: c)
+                return [.rotate(phase: .began, degrees: 0, at: c),
+                        .rotate(phase: .changed, degrees: -da, at: c)]
+            }
+            let move = CGVector(dx: c.x - c0.x, dy: c.y - c0.y)
+            if hypot(move.dx, move.dy) >= config.classifyMovement {
+                let dt = Geometry.seconds(from: startTime, to: timestamp)
+                let v = dt > 0 ? CGVector(dx: move.dx / dt, dy: move.dy / dt) : .zero
+                state = .scrolling(prevCentroid: c, prevTime: timestamp, velocity: v)
+                return [.scroll(phase: .began, delta: .zero, at: c),
+                        .scroll(phase: .changed, delta: move, at: c)]
+            }
+            state = .twoPending(startCentroid: c0, startDistance: d0, startAngle: a0, startTime: startTime, last: c)
+            return []
+        case .scrolling(let prev, let prevTime, let v0):
+            let delta = CGVector(dx: c.x - prev.x, dy: c.y - prev.y)
+            let dt = Geometry.seconds(from: prevTime, to: timestamp)
+            let v = dt > 0 ? CGVector(dx: delta.dx / dt, dy: delta.dy / dt) : v0
+            state = .scrolling(prevCentroid: c, prevTime: dt > 0 ? timestamp : prevTime, velocity: v)
+            return [.scroll(phase: .changed, delta: delta, at: c)]
+        case .pinching(let d0, _):
+            state = .pinching(prevDistance: d, last: c)
+            return [.magnify(phase: .changed, delta: d0 > 0 ? d / d0 - 1 : 0, at: c)]
+        case .rotating(let a0, _):
+            state = .rotating(prevAngle: a, last: c)
+            return [.rotate(phase: .changed, degrees: -Geometry.angleDelta(from: a0, to: a), at: c)]
+        default:
+            return []
+        }
     }
 
     // Replaced in Task 9.
