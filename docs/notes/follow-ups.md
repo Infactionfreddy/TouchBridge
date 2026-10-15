@@ -1,0 +1,55 @@
+# Follow-ups after the milestone 1/2 implementation
+
+State of branch `feature/m1-m2` (2026-10-15): all 17 plan tasks implemented and reviewed, 109 unit tests green, one test skipped until the recorded fixture exists. Nothing has run against the panel yet. This file lists what is still open, in the order it should happen.
+
+## 1. Hardware acceptance (needs the Elan panel and a person)
+
+1. Quit any running TouchBridge. Give the terminal app Input Monitoring. Run the seize spike:
+   `swift run hidrecord --seconds 12 --out Tests/TouchCoreTests/Fixtures/elan-two-finger.jsonl`
+   Touch with one finger (~3 s), then two fingers (~4 s). Expect `mode=exclusive` and a system cursor that no longer follows the finger. `shared (seize failed 0x…)` means Input Monitoring is missing for the terminal, or exclusive access is not possible on this macOS; the latter needs Plan B (event-tap filter, plan Task 15 step 6).
+2. `swift test` (or with `--scratch-path /tmp/touchbridge-build`): the fixture enables `RecordedReportTests.recordedElanSessionDecodes`, the only test of the IOKit report-ID framing assumption. Commit the fixture.
+3. `Scripts/build-app.sh` then `Scripts/install.sh`; grant both permissions. macOS may ask to Quit & Reopen after the Input Monitoring grant.
+4. Milestone 1 checklist: plan Task 15 step 7 (tap, drag, long press, double tap, unplug during drag, display selection, sleep/wake, log stream).
+5. Milestone 2 checklist: plan Task 16 step 4 (Gesture Identifier signs: fingers down → positive dy, spread → positive magnify, counter-clockwise → positive rotate, three-finger left → next Space; Safari, Preview, Mission Control; unplug during pinch; revoke Accessibility at runtime).
+6. If taps land mirrored or rotated, set `calibrations.<serial>.orientation` in `settings.json` (0/90/180/270). The default comes from `CGDisplayRotation`, whose sign relative to `DisplayMapper` is unverified.
+7. If `magnify`/`rotate` never arrive while scroll and clicks do, follow the fallback order in plan Task 16 step 4 (drop fields 50/101, then set the event type directly) and record the working combination in `GestureEventFields.swift`.
+8. Tag `v0.1.0` only after the checklists pass.
+
+## 2. Code follow-ups found in review (none blocks acceptance)
+
+Device layer
+- `DeviceManager.release(_:)` closes a device whose descriptor cannot be parsed; a later unplug of that device emits no `.detached`, so the "(descriptor)" status stays until re-plug. Keep a released-id set and still emit `.detached`.
+- Control events queued while `PipelineController.stopAll()` runs are handled afterwards; a generation counter in the sink would drop them.
+- Two concurrent `stop()` calls would hang the second caller; a `DispatchGroup` fixes it (single caller today).
+- With `preferExclusive == false` the attach event reports `.shared(seizeStatus: kIOReturnUnsupported)` although no seize was attempted.
+- `TouchScreenLayout` assumes one touch-screen collection, Contact Count as an Input item in the fingers' report, and one logical range for all slots; other devices get a clear `LayoutError`. Hardening pass if a second panel is supported.
+
+Gesture engine
+- Momentum velocity comes from the last frame only; add 2–3-frame smoothing if flings feel jumpy on hardware.
+- A contact replaced within one frame while two fingers are pending can emit a right click with a finger still down.
+- `.twoReleasing` ignores how far the remaining finger moves before the tap decision.
+- One-finger taps do not check `tapMaxDuration` (ruling R4); a stationary lift before `longPressDuration` is a click.
+
+App
+- `launchAtLoginEnabled` is computed from `SMAppService` and not observable; `lastError` is never cleared.
+- The display submenu refreshes via `.onAppear`; an `onDisplaysChanged` callback would keep it current.
+- The permission poll keeps running after both grants (this is what detects revocation).
+- `build-app.sh`: iCloud's File Provider can re-add Finder attributes between `xattr -cr` and `codesign`; rerun, or sign in a temp directory outside `~/Documents`.
+- Release signing (Developer ID, notarization) is not scripted yet (spec 4.3).
+
+Tests
+- Add boundary tests (exactly 60 pt / 0.5 s swipes, `dx == dy` tie), decoder edge cases, framing guards with reports one byte longer than the payload, all four key codes, the `DisplaySelection` JSON shape, a descriptor fuzz test.
+- A `CommandSink` protocol behind `EventInjector` would allow end-to-end tests from raw Elan bytes to `Command`s without CoreGraphics; the app layer has no automated coverage.
+
+Settings
+- `schemaVersion` is pinned to 1 on save; a future v2 needs real migration logic.
+- A single wrong-typed key sets the whole file aside as `.broken` (spec 7 behaviour); per-key lenient decoding with logging is an option.
+
+## 3. Decisions that deviate from the plan text
+
+- Settings values are clamped on decode so a hand-edited file cannot crash the pipeline.
+- The gesture engine restarts classification when the contact id set changes at the same finger count, and keeps one remaining finger inert (`.oneRemaining`) after a two-finger gesture until the count changes again.
+- Lifting one of three or four fingers consumes the rest until all lift; a swipe never turns into a scroll.
+- Swipe left maps to Ctrl+→ (next Space), the trackpad convention; verify at acceptance.
+- `DeviceManager.stop()` is synchronous and must never be called from the sink.
+- Permission revocation pauses once and shows the onboarding once; wake while paused does not reopen devices.
