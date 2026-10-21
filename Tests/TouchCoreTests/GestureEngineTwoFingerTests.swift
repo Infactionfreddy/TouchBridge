@@ -37,6 +37,16 @@ import CoreGraphics
         #expect(e.update(touches: [], timestamp: ms(450)).isEmpty)
     }
 
+    @Test func smallMovementClassifiesScrollWithoutDeadZone() {
+        var e = GestureEngine()
+        _ = e.update(touches: pair(100, 100, 140, 100), timestamp: ms(0))
+        #expect(e.update(touches: pair(100, 103, 140, 103), timestamp: ms(8)).isEmpty)          // 3 pt: still pending
+        #expect(e.update(touches: pair(100, 105, 140, 105), timestamp: ms(16)) == [          // 5 pt: scroll, small first delta
+            .scroll(phase: .began, delta: .zero, at: pt(120, 105)),
+            .scroll(phase: .changed, delta: CGVector(dx: 0, dy: 5), at: pt(120, 105)),
+        ])
+    }
+
     @Test func scrollClassificationAndMomentum() {
         var e = GestureEngine()
         _ = e.update(touches: pair(100, 100, 140, 100), timestamp: ms(0))

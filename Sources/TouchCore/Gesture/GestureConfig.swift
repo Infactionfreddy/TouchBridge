@@ -6,7 +6,9 @@ public struct GestureConfig: Codable, Equatable, Sendable {
     public var tapMaxMovement: Double = 8
     public var doubleTapInterval: Double = 0.30
     public var longPressDuration: Double = 0.60
-    public var classifyMovement: Double = 10
+    /// Two-finger movement that classifies a scroll. 4 pt instead of the spec's 10 pt: with the reference panel
+    /// (125 Hz, 0.65 px per digitizer step) 10 pt meant 33–60 ms of dead time followed by an 11–15 px jump.
+    public var classifyMovement: Double = 4
     public var pinchThreshold: Double = 12
     public var rotateThreshold: Double = 8
     public var momentumMinVelocity: Double = 50
