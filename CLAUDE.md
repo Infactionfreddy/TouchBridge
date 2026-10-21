@@ -10,7 +10,7 @@ macOS menu-bar app: exclusive HID access to a USB multitouch screen, own gesture
 - Device matching by HID usage page 0x0D / usage 0x04 only, never by vendor ID
 - Tests: Swift Testing (`import Testing`), fixtures in Tests/TouchCoreTests/Fixtures
 - Reference hardware: Elan 10-finger screen, VID 0x0712 PID 0x000A, descriptor in the spec appendix
-- Milestones 1 and 2 are code-complete (core, gestures, identifier window); hardware acceptance (plan Task 12 seize spike, Task 15/16 checklists) is pending. Next after acceptance: console/calibration UI, per-app gesture sets, local touch API, TUIO (spec section 12).
+- Milestones 1 and 2 are code-complete (core, gestures, identifier window); the seize spike passed (docs/notes/seize-spike.md: the panel needs its Feature reports read after every open); the Task 15/16 acceptance checklists are pending. Next after acceptance: console/calibration UI, per-app gesture sets, local touch API, TUIO (spec section 12).
 - Manual acceptance checklists: plan Task 15 (M1) and Task 16 (M2). Re-run them after changes to TouchInject or DevicePipeline.
-- The seize spike result and the working gesture field combination are documented in Sources/TouchInject/GestureEventFields.swift and docs/notes/ (if present).
+- The seize spike result and the working gesture field combination are documented in docs/notes/seize-spike.md and Sources/TouchInject/GestureEventFields.swift.
 - Build/test here with `--scratch-path /tmp/touchbridge-build` if codesign complains about Finder attributes; the plan's briefs used /private/tmp/claude-501/tb-build.

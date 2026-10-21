@@ -48,6 +48,7 @@ On first launch grant **Input Monitoring** and **Accessibility** in the window t
 - Menu says "shared": exclusive access failed; check Input Monitoring for TouchBridge. In shared mode macOS also moves the cursor.
 - Taps land mirrored or rotated: set `calibrations.<serial>.orientation` to 90, 180 or 270.
 - Pinch does nothing in an app: open "Gesture Identifier…" from the menu and perform the gesture on it; if `magnify` lines appear there, the app does not support trackpad zoom.
+- Touching does nothing although the status says exclusive: check the log for `read feature report` lines. The panel switches to multitouch reporting only after its Feature reports were read; without them it sends mouse reports only (see `docs/notes/seize-spike.md`).
 - Logs: `log stream --predicate 'subsystem == "org.touchbridge"' --level info`
 - `swift test` fails at codesign with "resource fork, Finder information, or similar detritus not allowed": run `swift test --scratch-path /tmp/touchbridge-build` or `xattr -cr .build` first (Finder attributes under ~/Documents).
 
@@ -65,7 +66,7 @@ First run on new hardware: run the seize spike with the panel connected. Quit To
 swift run hidrecord --seconds 12 --out Tests/TouchCoreTests/Fixtures/elan-two-finger.jsonl
 ```
 
-Look for `mode=exclusive` and for the macOS cursor no longer moving while you touch the screen. If `shared (seize failed 0x…)` appears, either Input Monitoring is missing for the terminal app, or exclusive access is not possible on this macOS; the latter needs the event-tap fallback described in the plan. Recording this fixture also enables the currently skipped test `RecordedReportTests.recordedElanSessionDecodes`.
+Look for `mode=exclusive` and for the macOS cursor no longer moving while you touch the screen. If `shared (seize failed 0x…)` appears, either Input Monitoring is missing for the terminal app, or exclusive access is not possible on this macOS; the latter needs the event-tap fallback described in the plan. The repository ships a recording from the reference panel (`RecordedReportTests.recordedElanSessionDecodes` checks it); re-record it for a different device. Note that the reference panel reports only mouse events until the host has read its Feature reports; `DeviceManager` does that after every open (see `docs/notes/seize-spike.md`).
 
 Design: `docs/superpowers/specs/`. Plan: `docs/superpowers/plans/`. The undocumented CGEvent fields used for magnify/rotate live in `Sources/TouchInject/GestureEventFields.swift` only.
 

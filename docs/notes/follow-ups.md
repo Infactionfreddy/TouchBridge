@@ -1,13 +1,11 @@
 # Follow-ups after the milestone 1/2 implementation
 
-State of branch `feature/m1-m2` (2026-10-15): all 17 plan tasks implemented and reviewed, 109 unit tests green, one test skipped until the recorded fixture exists. Nothing has run against the panel yet. This file lists what is still open, in the order it should happen.
+State (2026-10-21): all 17 plan tasks implemented, reviewed and merged to `main`; 109 unit tests green including the recorded-panel test. The seize spike passed on the reference panel and uncovered that the panel needs its Feature reports read after every open (`docs/notes/seize-spike.md`); Plan B is not needed. This file lists what is still open, in the order it should happen.
 
 ## 1. Hardware acceptance (needs the Elan panel and a person)
 
-1. Quit any running TouchBridge. Give the terminal app Input Monitoring. Run the seize spike:
-   `swift run hidrecord --seconds 12 --out Tests/TouchCoreTests/Fixtures/elan-two-finger.jsonl`
-   Touch with one finger (~3 s), then two fingers (~4 s). Expect `mode=exclusive` and a system cursor that no longer follows the finger. `shared (seize failed 0x…)` means Input Monitoring is missing for the terminal, or exclusive access is not possible on this macOS; the latter needs Plan B (event-tap filter, plan Task 15 step 6).
-2. `swift test` (or with `--scratch-path /tmp/touchbridge-build`): the fixture enables `RecordedReportTests.recordedElanSessionDecodes`, the only test of the IOKit report-ID framing assumption. Commit the fixture.
+1. Done: seize spike (`mode=exclusive`, fixture recorded, Plan B not needed).
+2. Done: `swift test` with the fixture (`RecordedReportTests.recordedElanSessionDecodes` passes).
 3. `Scripts/build-app.sh` then `Scripts/install.sh`; grant both permissions. macOS may ask to Quit & Reopen after the Input Monitoring grant.
 4. Milestone 1 checklist: plan Task 15 step 7 (tap, drag, long press, double tap, unplug during drag, display selection, sleep/wake, log stream).
 5. Milestone 2 checklist: plan Task 16 step 4 (Gesture Identifier signs: fingers down → positive dy, spread → positive magnify, counter-clockwise → positive rotate, three-finger left → next Space; Safari, Preview, Mission Control; unplug during pinch; revoke Accessibility at runtime).

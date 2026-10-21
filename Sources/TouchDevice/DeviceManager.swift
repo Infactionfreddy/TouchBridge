@@ -182,8 +182,35 @@ public final class DeviceManager: @unchecked Sendable {
             let entry = Unmanaged<Entry>.fromOpaque(context).takeUnretainedValue()
             entry.manager?.deliver(entry: entry, reportID: UInt8(truncatingIfNeeded: reportID), report: report, length: length)
         }, context)
+        readFeatureReports(device, info: info)
         logger.info("attached \(info.product, privacy: .public) serial \(info.serial, privacy: .public) mode \(mode.isExclusive ? "exclusive" : "shared", privacy: .public)")
         sink(.attached(id: id, info: info, mode: mode))
+    }
+
+    /// Switches the panel to multitouch reporting. Touch controllers such as the reference Elan keep
+    /// sending only their mouse-emulation report (report 7) until the host has read their Feature
+    /// reports, which Windows does during enumeration; the switch holds only for the current open, so
+    /// it is repeated after every open. Every Feature report of the descriptor is read once. Failures
+    /// are logged and ignored: a device may have no Feature reports or refuse one of them.
+    private func readFeatureReports(_ device: IOHIDDevice, info: DeviceInfo) {
+        guard let descriptor = try? HIDDescriptorParser().parse(info.descriptor) else { return }
+        var seen = Set<UInt8>()
+        let reportIDs = descriptor.fields.filter { $0.kind == .feature }.map(\.reportID).filter { seen.insert($0).inserted }
+        guard !reportIDs.isEmpty else { return }
+        let maxSize = (IOHIDDeviceGetProperty(device, kIOHIDMaxFeatureReportSizeKey as CFString) as? NSNumber)?.intValue ?? 0
+        let capacity = max(maxSize + 1, 1024)
+        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: capacity)
+        buffer.initialize(repeating: 0, count: capacity)
+        defer { buffer.deallocate() }
+        for reportID in reportIDs {
+            var length = CFIndex(capacity)
+            let status = IOHIDDeviceGetReport(device, kIOHIDReportTypeFeature, CFIndex(reportID), buffer, &length)
+            if status == kIOReturnSuccess {
+                logger.info("read feature report \(reportID, privacy: .public) of \(info.product, privacy: .public) (\(length, privacy: .public) bytes)")
+            } else {
+                logger.info("feature report \(reportID, privacy: .public) of \(info.product, privacy: .public) not readable: 0x\(String(UInt32(bitPattern: status), radix: 16), privacy: .public)")
+            }
+        }
     }
 
     private func deviceRemoved(_ device: IOHIDDevice) {
