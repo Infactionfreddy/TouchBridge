@@ -75,17 +75,35 @@ import CoreGraphics
         #expect(e.update(touches: [], timestamp: ms(1100)) == [.scroll(phase: .ended, delta: .zero, at: pt(120, 113))])
     }
 
-    @Test func duplicateTimestampKeepsVelocity() {
+    @Test func duplicateTimestampGivesFiniteVelocity() throws {
         var e = GestureEngine()
         _ = e.update(touches: pair(100, 100, 140, 100), timestamp: ms(0))
         _ = e.update(touches: pair(100, 115, 140, 115), timestamp: ms(30))
-        _ = e.update(touches: pair(100, 125, 140, 125), timestamp: ms(60))      // 333 pt/s
+        _ = e.update(touches: pair(100, 125, 140, 125), timestamp: ms(60))
         #expect(e.update(touches: pair(100, 130, 140, 130), timestamp: ms(60)) == [
             .scroll(phase: .changed, delta: CGVector(dx: 0, dy: 5), at: pt(120, 130)),
         ])
         let lift = e.update(touches: [], timestamp: ms(50))   // earlier than before: still no crash
+        try #require(lift.count == 2)
         guard case .scrollMomentum(let v, _) = lift[1] else { Issue.record("expected momentum"); return }
-        #expect(abs(v.dy - 333.33) < 0.5)
+        // Window of 50 ms before the last sample (t = 60): samples at 30, 60, 60 → 15 pt in 30 ms.
+        #expect(v.dy.isFinite)
+        #expect(abs(v.dy - 500) < 0.5)
+    }
+
+    @Test func liftVelocityUsesRecentWindowNotLastFrame() throws {
+        var e = GestureEngine()
+        _ = e.update(touches: pair(100, 100, 140, 100), timestamp: ms(0))
+        _ = e.update(touches: pair(100, 115, 140, 115), timestamp: ms(30))     // classified
+        _ = e.update(touches: pair(100, 130, 140, 130), timestamp: ms(60))
+        _ = e.update(touches: pair(100, 145, 140, 145), timestamp: ms(90))     // 500 pt/s
+        _ = e.update(touches: pair(100, 146, 140, 146), timestamp: ms(98))     // fingers slow down before lifting
+        let lift = e.update(touches: [], timestamp: ms(106))
+        try #require(lift.count == 2)
+        guard case .scrollMomentum(let v, _) = lift[1] else { Issue.record("expected momentum"); return }
+        // Last frame alone would give 1 pt / 8 ms = 125 pt/s; the 50 ms window (60…98 ms) gives 16 pt / 38 ms.
+        #expect(abs(v.dy - 421.05) < 0.5)
+        #expect(v.dx == 0)
     }
 
     @Test func newTouchCancelsMomentum() {

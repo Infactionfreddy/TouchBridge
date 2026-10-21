@@ -30,6 +30,13 @@ public struct GestureEngine: Sendable {
     private(set) var state: State = .idle
     private var lastTap: TapRecord?
     private var momentumMayBeRunning = false
+    /// Recent scroll centroids; the lift-off velocity is measured over `config.velocityWindow` of them.
+    private var scrollSamples: [ScrollSample] = []
+
+    struct ScrollSample: Equatable {
+        var time: UInt64
+        var centroid: CGPoint
+    }
     private var trackedIDs: Set<Int> = []
 
     public init(config: GestureConfig = GestureConfig()) {
@@ -89,7 +96,27 @@ public struct GestureEngine: Sendable {
         lastTap = nil
         trackedIDs = []
         momentumMayBeRunning = false
+        scrollSamples = []
         return actions
+    }
+
+    // MARK: - Scroll velocity
+
+    private mutating func recordScrollSample(_ time: UInt64, _ centroid: CGPoint) {
+        scrollSamples.append(ScrollSample(time: time, centroid: centroid))
+        if scrollSamples.count > 32 { scrollSamples.removeFirst(scrollSamples.count - 32) }
+    }
+
+    /// Velocity over the samples inside `config.velocityWindow` before the last one (at least two samples;
+    /// the last two when the window holds fewer). `fallback` when no pair spans a positive time.
+    private func liftVelocity(fallback: CGVector) -> CGVector {
+        guard scrollSamples.count >= 2, let last = scrollSamples.last else { return fallback }
+        let windowNs = UInt64(config.velocityWindow * 1_000_000_000)
+        let cutoff = last.time > windowNs ? last.time - windowNs : 0
+        let first = scrollSamples.first { $0.time >= cutoff && $0.time < last.time } ?? scrollSamples[scrollSamples.count - 2]
+        let dt = Geometry.seconds(from: first.time, to: last.time)
+        guard dt > 0 else { return fallback }
+        return CGVector(dx: (last.centroid.x - first.centroid.x) / dt, dy: (last.centroid.y - first.centroid.y) / dt)
     }
 
     // MARK: - Finger-count bookkeeping
@@ -153,8 +180,10 @@ public struct GestureEngine: Sendable {
             }
             state = .idle
             return ([], true)
-        case .scrolling(let prev, _, let v):
+        case .scrolling(let prev, _, let lastFrameVelocity):
             var out: [Action] = [.scroll(phase: .ended, delta: .zero, at: prev)]
+            let v = liftVelocity(fallback: lastFrameVelocity)
+            scrollSamples = []
             if hypot(v.dx, v.dy) >= config.momentumMinVelocity {
                 out.append(.scrollMomentum(velocity: v, at: prev))
                 momentumMayBeRunning = true
@@ -191,6 +220,7 @@ public struct GestureEngine: Sendable {
     private mutating func enter(_ touches: [ActiveTouch], _ timestamp: UInt64) -> [Action] {
         var out: [Action] = []
         trackedIDs = Set(touches.map(\.id))
+        scrollSamples = []
         if momentumMayBeRunning && !touches.isEmpty {
             out.append(.cancelMomentum)
             momentumMayBeRunning = false
@@ -276,6 +306,7 @@ public struct GestureEngine: Sendable {
                 let dt = Geometry.seconds(from: startTime, to: timestamp)
                 let v = dt > 0 ? CGVector(dx: move.dx / dt, dy: move.dy / dt) : .zero
                 state = .scrolling(prevCentroid: c, prevTime: timestamp, velocity: v)
+                scrollSamples = [ScrollSample(time: startTime, centroid: c0), ScrollSample(time: timestamp, centroid: c)]
                 return [.scroll(phase: .began, delta: .zero, at: c),
                         .scroll(phase: .changed, delta: move, at: c)]
             }
@@ -286,6 +317,7 @@ public struct GestureEngine: Sendable {
             let dt = Geometry.seconds(from: prevTime, to: timestamp)
             let v = dt > 0 ? CGVector(dx: delta.dx / dt, dy: delta.dy / dt) : v0
             state = .scrolling(prevCentroid: c, prevTime: dt > 0 ? timestamp : prevTime, velocity: v)
+            recordScrollSample(timestamp, c)
             return [.scroll(phase: .changed, delta: delta, at: c)]
         case .pinching(let d0, _):
             state = .pinching(prevDistance: d, last: c)

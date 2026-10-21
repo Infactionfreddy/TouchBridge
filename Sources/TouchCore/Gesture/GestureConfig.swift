@@ -12,6 +12,9 @@ public struct GestureConfig: Codable, Equatable, Sendable {
     public var pinchThreshold: Double = 12
     public var rotateThreshold: Double = 8
     public var momentumMinVelocity: Double = 50
+    /// Time window (seconds) over which the lift-off velocity for momentum is measured. A single report
+    /// interval underestimates it because the fingers slow down just before they leave the panel.
+    public var velocityWindow: Double = 0.05
     public var momentumDecayPerFrame: Double = 0.96
     public var momentumStopVelocity: Double = 20
     public var swipeDistance: Double = 60
@@ -37,6 +40,7 @@ public struct GestureConfig: Codable, Equatable, Sendable {
         pinchThreshold = Self.clamp(try read(.pinchThreshold), nonNegative, default: d.pinchThreshold)
         rotateThreshold = Self.clamp(try read(.rotateThreshold), 0...180, default: d.rotateThreshold)
         momentumMinVelocity = Self.clamp(try read(.momentumMinVelocity), nonNegative, default: d.momentumMinVelocity)
+        velocityWindow = Self.clamp(try read(.velocityWindow), 0.008...1.0, default: d.velocityWindow)
         momentumDecayPerFrame = Self.clamp(try read(.momentumDecayPerFrame), 0...0.999, default: d.momentumDecayPerFrame)
         momentumStopVelocity = Self.clamp(try read(.momentumStopVelocity), nonNegative, default: d.momentumStopVelocity)
         swipeDistance = Self.clamp(try read(.swipeDistance), nonNegative, default: d.swipeDistance)
