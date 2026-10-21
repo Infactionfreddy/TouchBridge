@@ -59,7 +59,7 @@ public final class EventInjector: @unchecked Sendable {
                 scrollRemainder = .zero
             }
             let whole = Self.splitWholePoints(delta, remainder: &scrollRemainder)
-            post(Self.scrollEvent(delta: whole, at: p, phase: phase, momentum: nil, source: source))
+            post(Self.scrollEvent(delta: delta, pointDelta: whole, at: p, phase: phase, momentum: nil, source: source))
         case .scrollMomentum(let velocity, let p):
             startMomentum(velocity: velocity, at: p)
         case .cancelMomentum:
@@ -105,8 +105,9 @@ public final class EventInjector: @unchecked Sendable {
             return
         }
         let phase = momentumIndex == 0 ? Self.momentumBegin : Self.momentumContinue
-        let whole = Self.splitWholePoints(momentumFrames[momentumIndex], remainder: &scrollRemainder)
-        post(Self.scrollEvent(delta: whole, at: momentumLocation, phase: nil, momentum: phase, source: source))
+        let frame = momentumFrames[momentumIndex]
+        let whole = Self.splitWholePoints(frame, remainder: &scrollRemainder)
+        post(Self.scrollEvent(delta: frame, pointDelta: whole, at: momentumLocation, phase: nil, momentum: phase, source: source))
         momentumIndex += 1
     }
 
@@ -129,10 +130,17 @@ public final class EventInjector: @unchecked Sendable {
         return event
     }
 
-    static func scrollEvent(delta: CGVector, at p: CGPoint, phase: GesturePhase?, momentum: Int64?, source: CGEventSource?) -> CGEvent? {
+    /// `delta` is the exact movement in points; it goes into the fixed-point fields that precise-scrolling
+    /// consumers read (`NSEvent.scrollingDeltaX/Y`), so fractional deltas are not lost to rounding.
+    /// `pointDelta` is the whole-point part for the integer fields that legacy consumers read; callers carry
+    /// the remainder across events. When nil, `delta` truncated toward zero is used.
+    static func scrollEvent(delta: CGVector, pointDelta: CGVector? = nil, at p: CGPoint, phase: GesturePhase?, momentum: Int64?, source: CGEventSource?) -> CGEvent? {
+        let points = pointDelta ?? CGVector(dx: delta.dx.rounded(.towardZero), dy: delta.dy.rounded(.towardZero))
         guard let event = CGEvent(scrollWheelEvent2Source: source, units: .pixel, wheelCount: 2,
-                                  wheel1: clampedInt32(delta.dy), wheel2: clampedInt32(delta.dx), wheel3: 0) else { return nil }
+                                  wheel1: clampedInt32(points.dy), wheel2: clampedInt32(points.dx), wheel3: 0) else { return nil }
         event.location = p
+        event.setDoubleValueField(.scrollWheelEventFixedPtDeltaAxis1, value: clampedFixedPoint(delta.dy))
+        event.setDoubleValueField(.scrollWheelEventFixedPtDeltaAxis2, value: clampedFixedPoint(delta.dx))
         event.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
         if let phase { event.setIntegerValueField(.scrollWheelEventScrollPhase, value: scrollPhaseValue(phase)) }
         if let momentum { event.setIntegerValueField(.scrollWheelEventMomentumPhase, value: momentum) }
@@ -144,6 +152,12 @@ public final class EventInjector: @unchecked Sendable {
     static func clampedInt32(_ x: Double) -> Int32 {
         guard !x.isNaN else { return 0 }
         return Int32(min(max(x, Double(Int32.min)), Double(Int32.max)))
+    }
+
+    /// The fixed-point scroll fields hold 16.16 values; keep the magnitude well inside that range.
+    static func clampedFixedPoint(_ x: Double) -> Double {
+        guard !x.isNaN else { return 0 }
+        return min(max(x, -30_000), 30_000)
     }
 
     static func scrollPhaseValue(_ phase: GesturePhase) -> Int64 {

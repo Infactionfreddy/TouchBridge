@@ -29,6 +29,15 @@ import TouchCore
         #expect(m.getIntegerValueField(.scrollWheelEventScrollPhase) == 0)
     }
 
+    @Test func scrollEventCarriesFractionalDeltas() throws {
+        let e = try #require(EventInjector.scrollEvent(delta: CGVector(dx: 0.25, dy: -2.5), pointDelta: CGVector(dx: 0, dy: -2),
+                                                       at: p, phase: .changed, momentum: nil, source: source))
+        #expect(e.getIntegerValueField(.scrollWheelEventPointDeltaAxis1) == -2)
+        #expect(e.getIntegerValueField(.scrollWheelEventPointDeltaAxis2) == 0)
+        #expect(abs(e.getDoubleValueField(.scrollWheelEventFixedPtDeltaAxis1) + 2.5) < 1e-3)
+        #expect(abs(e.getDoubleValueField(.scrollWheelEventFixedPtDeltaAxis2) - 0.25) < 1e-3)
+    }
+
     @Test func scrollEventClampsHugeAndNaNDeltas() throws {
         let e = try #require(EventInjector.scrollEvent(delta: CGVector(dx: 1e12, dy: .nan), at: p, phase: .changed, momentum: nil, source: source))
         #expect(e.getIntegerValueField(.scrollWheelEventPointDeltaAxis2) == Int64(Int32.max))
