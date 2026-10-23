@@ -79,7 +79,7 @@ final class RecorderNSView: NSView {
         switch event.keyCode {
         case 53:
             onResult?(.cancelled)
-        case 51, 117 where !hasModifier:
+        case 51 where !hasModifier, 117 where !hasModifier:
             current = nil
             onResult?(.cleared)
         default:
