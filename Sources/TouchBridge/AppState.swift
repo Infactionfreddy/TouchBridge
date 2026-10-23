@@ -23,6 +23,9 @@ final class AppState {
     var lastError: String?
     var displays: [DisplayResolver.DisplayDescription] = []
     var liveContacts: [Contact] = []
+    /// Frontmost application and the gesture profile that applies to it, for the settings window header.
+    var frontmostBundleID: String?
+    var activeProfileName = "Default"
     private var controller: PipelineController?
 
     let store: SettingsStore
@@ -97,6 +100,10 @@ final class AppState {
             if status == .none { self?.liveContacts = [] }
         }
         controller.onContacts = { [weak self] _, contacts in self?.liveContacts = contacts }
+        controller.onActiveProfile = { [weak self] bundleID, profile in
+            self?.frontmostBundleID = bundleID
+            self?.activeProfileName = profile.profileName
+        }
         self.controller = controller
         displays = controller.availableDisplays()
         controller.start()

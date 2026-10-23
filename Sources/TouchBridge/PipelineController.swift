@@ -21,10 +21,14 @@ private final class PipelineRegistry: @unchecked Sendable {
 final class PipelineController {
     var onStatus: ((AppState.DeviceStatus) -> Void)?
     var onContacts: ((DeviceID, [Contact]) -> Void)?
+    /// Reports the frontmost bundle ID and the profile that now applies (for the settings window header).
+    var onActiveProfile: ((String?, EffectiveProfile) -> Void)?
 
     private let logger = Logger(subsystem: "org.touchbridge", category: "pipeline")
     private let registry = PipelineRegistry()
     private let displays = DisplayResolver()
+    private let frontmost = FrontmostAppObserver()
+    private static let ownBundleID = Bundle.main.bundleIdentifier ?? "org.touchbridge.TouchBridge"
     private var deviceManager: DeviceManager?
     private var settings: Settings
     private(set) var isPaused = false
@@ -38,6 +42,8 @@ final class PipelineController {
         isPaused = false
         guard deviceManager == nil else { return }
         displays.startObserving { [weak self] in self?.remapAll() }
+        frontmost.onChange = { [weak self] _ in self?.applyProfile() }
+        frontmost.start()
         if wakeObserver == nil {
             wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
                 forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
@@ -89,8 +95,30 @@ final class PipelineController {
 
     func updateSettings(_ settings: Settings) {
         self.settings = settings
-        for pipeline in registry.all { pipeline.updateSettings(settings) }
+        applyProfile()
         remapAll()
+    }
+
+    /// The effective profile for the frontmost application. TouchBridge itself and an unknown frontmost app use
+    /// the default profile, so configuring never locks the user out.
+    var activeProfile: EffectiveProfile {
+        let id = frontmost.bundleID
+        let lookup = (id == nil || id == Self.ownBundleID) ? nil : id
+        return settings.effectiveProfile(for: lookup)
+    }
+
+    private func applyProfile() {
+        let profile = activeProfile
+        for pipeline in registry.all { pipeline.apply(profile: profile, enabled: settings.enabled) }
+        onActiveProfile?(frontmost.bundleID, profile)
+    }
+
+    private func open(_ path: String) {
+        guard FileManager.default.fileExists(atPath: path) else {
+            logger.error("open file: \(path, privacy: .public) does not exist")
+            return
+        }
+        NSWorkspace.shared.open(URL(fileURLWithPath: path))
     }
 
     func availableDisplays() -> [DisplayResolver.DisplayDescription] {
@@ -108,9 +136,13 @@ final class PipelineController {
             do {
                 let layout = try TouchScreenLayout(descriptor: HIDDescriptorParser().parse(info.descriptor))
                 let pipeline = DevicePipeline(id: id, info: info, layout: layout,
-                                              mapping: mapping(for: info, layout: layout), settings: settings)
+                                              mapping: mapping(for: info, layout: layout),
+                                              profile: activeProfile, enabled: settings.enabled)
                 pipeline.onContacts = { [weak self] contacts in
                     Task { @MainActor in self?.onContacts?(id, contacts) }
+                }
+                pipeline.onOpenFile = { [weak self] path in
+                    Task { @MainActor in self?.open(path) }
                 }
                 registry.set(pipeline, for: id)
                 let problem: String?

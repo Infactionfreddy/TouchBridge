@@ -12,6 +12,8 @@ final class DevicePipeline: @unchecked Sendable {
     let layout: TouchScreenLayout
     let queue: DispatchQueue
     var onContacts: (@Sendable ([Contact]) -> Void)?
+    /// Called (on the pipeline queue) for `Command.openFile`; the app layer opens the file on the main actor.
+    var onOpenFile: (@Sendable (String) -> Void)?
 
     private let logger = Logger(subsystem: "org.touchbridge", category: "pipeline")
     private var decoder: ReportDecoder
@@ -24,20 +26,20 @@ final class DevicePipeline: @unchecked Sendable {
     private var enabled: Bool
     private var lastContactsPublish: UInt64 = 0
 
-    init(id: DeviceID, info: DeviceInfo, layout: TouchScreenLayout, mapping: MappingConfig, settings: Settings) {
+    init(id: DeviceID, info: DeviceInfo, layout: TouchScreenLayout, mapping: MappingConfig, profile: EffectiveProfile, enabled: Bool) {
         self.id = id
         self.info = info
         self.layout = layout
         queue = DispatchQueue(label: "org.touchbridge.pipeline.\(id)", qos: .userInteractive)
         decoder = ReportDecoder(layout: layout)
         mapper = DisplayMapper(config: mapping)
-        tracker = TouchTracker(stuckTimeout: UInt64(settings.effectiveProfile(for: nil).config.stuckTimeout * 1_000_000_000))
-        engine = GestureEngine(config: settings.effectiveProfile(for: nil).config)
-        router = ActionRouter(profile: settings.effectiveProfile(for: nil))
+        tracker = TouchTracker(stuckTimeout: UInt64(profile.config.stuckTimeout * 1_000_000_000))
+        engine = GestureEngine(config: profile.config)
+        router = ActionRouter(profile: profile)
         injector = EventInjector(queue: queue, momentum: MomentumGenerator(
-            decayPerFrame: settings.effectiveProfile(for: nil).config.momentumDecayPerFrame,
-            stopVelocity: settings.effectiveProfile(for: nil).config.momentumStopVelocity))
-        enabled = settings.enabled
+            decayPerFrame: profile.config.momentumDecayPerFrame,
+            stopVelocity: profile.config.momentumStopVelocity))
+        self.enabled = enabled
     }
 
     // MARK: - Input (any thread)
@@ -56,15 +58,18 @@ final class DevicePipeline: @unchecked Sendable {
         }
     }
 
-    func updateSettings(_ settings: Settings) {
+    /// Applies the effective profile of the frontmost app and the touch-enabled flag. A running gesture keeps
+    /// the routing decision made at its start (`ActionRouter(profile:continuing:)`); new thresholds apply from
+    /// the next decision on.
+    func apply(profile: EffectiveProfile, enabled: Bool) {
         queue.async {
-            self.engine.config = settings.effectiveProfile(for: nil).config
-            self.router = ActionRouter(profile: settings.effectiveProfile(for: nil))
-            self.tracker.stuckTimeout = UInt64(settings.effectiveProfile(for: nil).config.stuckTimeout * 1_000_000_000)
-            self.injector.momentum = MomentumGenerator(decayPerFrame: settings.effectiveProfile(for: nil).config.momentumDecayPerFrame,
-                                                       stopVelocity: settings.effectiveProfile(for: nil).config.momentumStopVelocity)
-            if self.enabled && !settings.enabled { self.finishGestures() }
-            self.enabled = settings.enabled
+            self.engine.config = profile.config
+            self.router = ActionRouter(profile: profile, continuing: self.router)
+            self.tracker.stuckTimeout = UInt64(profile.config.stuckTimeout * 1_000_000_000)
+            self.injector.momentum = MomentumGenerator(decayPerFrame: profile.config.momentumDecayPerFrame,
+                                                       stopVelocity: profile.config.momentumStopVelocity)
+            if self.enabled && !enabled { self.finishGestures() }
+            self.enabled = enabled
         }
     }
 
@@ -129,11 +134,15 @@ final class DevicePipeline: @unchecked Sendable {
 
     private func run(_ actions: [Action]) {
         guard !actions.isEmpty else { return }
-        let context = RouterContext(frontmostBundleID: nil)
+        let context = RouterContext(frontmostBundleID: router.profile.profileID)
         for action in actions {
             logger.debug("action \(String(describing: action), privacy: .public)")
             for command in router.route(action, context: context) {
-                injector.perform(command)
+                if case .openFile(let path) = command {
+                    onOpenFile?(path)
+                } else {
+                    injector.perform(command)
+                }
             }
         }
     }
