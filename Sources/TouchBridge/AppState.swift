@@ -26,6 +26,13 @@ final class AppState {
     /// Frontmost application and the gesture profile that applies to it, for the settings window header.
     var frontmostBundleID: String?
     var activeProfileName = "Default"
+
+    /// Profile shown in the settings window: `GestureProfile.defaultID` or an app's bundle identifier.
+    var selectedProfileID: String = GestureProfile.defaultID
+
+    var selectedProfile: GestureProfile {
+        settings.profile(id: selectedProfileID) ?? settings.defaultProfile
+    }
     private var controller: PipelineController?
 
     let store: SettingsStore
@@ -149,6 +156,84 @@ final class AppState {
 
     func showIdentifier() {
         Windows.shared.show(GestureIdentifierView(state: self), title: "Gesture Identifier", id: "identifier")
+    }
+
+    func showSettings() {
+        Windows.shared.show(SettingsView(state: self), title: "TouchBridge Settings", id: "settings")
+    }
+
+    // MARK: - Profile editing (every change is saved and pushed to the pipelines at once)
+
+    /// Adds a profile for the application bundle at `url` (from the open panel) and selects it.
+    func addProfile(appAt url: URL) {
+        guard let bundle = Bundle(url: url), let bundleID = bundle.bundleIdentifier else {
+            lastError = "Not an application bundle: \(url.lastPathComponent)"
+            return
+        }
+        if settings.profile(id: bundleID) == nil {
+            let info = bundle.infoDictionary ?? [:]
+            let name = (info["CFBundleDisplayName"] as? String) ?? (info["CFBundleName"] as? String) ?? url.deletingPathExtension().lastPathComponent
+            settings.upsert(GestureProfile(bundleID: bundleID, displayName: name))
+            saveSettings()
+        }
+        selectedProfileID = bundleID
+    }
+
+    func removeProfile(id: String) {
+        guard id != GestureProfile.defaultID else { return }
+        settings.removeProfile(bundleID: id)
+        if selectedProfileID == id { selectedProfileID = GestureProfile.defaultID }
+        saveSettings()
+    }
+
+    /// The binding shown for `kind` in profile `id`, and whether it is inherited (not set in that profile).
+    func resolvedBinding(_ kind: GestureKind, in id: String) -> (binding: GestureBinding, inherited: Bool) {
+        if let own = settings.profile(id: id)?.bindings[kind] { return (own, false) }
+        if id == GestureProfile.defaultID { return (.builtIn(for: kind), true) }
+        return (settings.effectiveProfile(for: nil).binding(kind), true)
+    }
+
+    func setBinding(_ binding: GestureBinding, for kind: GestureKind, in id: String) {
+        guard var profile = settings.profile(id: id) else { return }
+        profile.bindings[kind] = binding
+        settings.upsert(profile)
+        saveSettings()
+    }
+
+    func resetBinding(for kind: GestureKind, in id: String) {
+        guard var profile = settings.profile(id: id) else { return }
+        profile.bindings[kind] = nil
+        settings.upsert(profile)
+        saveSettings()
+    }
+
+    /// The tuning value shown for `field` in profile `id`, and whether it is inherited.
+    func resolvedConfigValue(_ field: GestureConfigField, in id: String) -> (value: Double, inherited: Bool) {
+        if let own = settings.profile(id: id)?.config[keyPath: field.override] { return (own, false) }
+        let inherited = id == GestureProfile.defaultID ? GestureConfig() : settings.effectiveProfile(for: nil).config
+        return (inherited[keyPath: field.value], true)
+    }
+
+    /// nil removes the override (the value is inherited again).
+    func setConfigValue(_ value: Double?, for field: GestureConfigField, in id: String) {
+        guard var profile = settings.profile(id: id) else { return }
+        profile.config[keyPath: field.override] = value
+        settings.upsert(profile)
+        saveSettings()
+    }
+
+    func restoreGestures(in id: String) {
+        guard var profile = settings.profile(id: id) else { return }
+        profile.bindings = [:]
+        settings.upsert(profile)
+        saveSettings()
+    }
+
+    func restoreTuning(in id: String) {
+        guard var profile = settings.profile(id: id) else { return }
+        profile.config = GestureConfigOverrides()
+        settings.upsert(profile)
+        saveSettings()
     }
 
     func openSettingsFile() {

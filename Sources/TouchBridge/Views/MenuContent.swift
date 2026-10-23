@@ -27,7 +27,7 @@ struct MenuContent: View {
         Divider()
         Button("Permissions…") { state.showPermissions() }
         Button("Gesture Identifier…") { state.showIdentifier() }
-        Button("Open settings file") { state.openSettingsFile() }
+        Button("Settings…") { state.showSettings() }
         Divider()
         Button("Quit TouchBridge") { NSApp.terminate(nil) }
     }

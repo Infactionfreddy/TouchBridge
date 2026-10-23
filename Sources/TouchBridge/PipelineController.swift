@@ -44,6 +44,7 @@ final class PipelineController {
         displays.startObserving { [weak self] in self?.remapAll() }
         frontmost.onChange = { [weak self] _ in self?.applyProfile() }
         frontmost.start()
+        applyProfile()
         if wakeObserver == nil {
             wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
                 forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
@@ -114,11 +115,12 @@ final class PipelineController {
     }
 
     private func open(_ path: String) {
-        guard FileManager.default.fileExists(atPath: path) else {
-            logger.error("open file: \(path, privacy: .public) does not exist")
+        let expanded = (path as NSString).expandingTildeInPath
+        guard FileManager.default.fileExists(atPath: expanded) else {
+            logger.error("open file: \(expanded, privacy: .public) does not exist")
             return
         }
-        NSWorkspace.shared.open(URL(fileURLWithPath: path))
+        NSWorkspace.shared.open(URL(fileURLWithPath: expanded))
     }
 
     func availableDisplays() -> [DisplayResolver.DisplayDescription] {
