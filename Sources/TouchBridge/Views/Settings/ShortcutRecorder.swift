@@ -41,6 +41,12 @@ enum KeyNames {
     ]
 }
 
+enum RecorderOutcome {
+    case use(KeyCommand)
+    case clear
+    case cancel
+}
+
 enum RecorderResult {
     case recorded(KeyCommand)
     case cleared
@@ -56,7 +62,15 @@ final class RecorderNSView: NSView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        window?.makeFirstResponder(self)
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let window = self.window else { return }
+            window.makeFirstResponder(self)
+        }
+    }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        keyDown(with: event)
+        return true
     }
 
     override func keyDown(with event: NSEvent) {
@@ -108,12 +122,18 @@ struct ShortcutRecorder: NSViewRepresentable {
     }
 }
 
-/// Sheet: record a shortcut, warn when it has no modifier, confirm with "Use". `onDone(nil)` = cancelled.
+/// Sheet: record a shortcut, warn when it has no modifier, confirm with "Use" (or "Clear" after Delete).
 struct ShortcutRecorderSheet: View {
     let current: KeyCommand?
-    let onDone: (KeyCommand?) -> Void
+    let onDone: (RecorderOutcome) -> Void
     @State private var recorded: KeyCommand?
+    @State private var cleared = false
     @State private var warning: String?
+
+    private static func warning(for key: KeyCommand) -> String? {
+        (key.control || key.option || key.shift || key.command) ? nil
+            : "A shortcut without a modifier key types that key into the frontmost app."
+    }
 
     var body: some View {
         VStack(spacing: 12) {
@@ -122,23 +142,32 @@ struct ShortcutRecorderSheet: View {
                 switch result {
                 case .recorded(let key):
                     recorded = key
-                    warning = (key.control || key.option || key.shift || key.command) ? nil
-                        : "A shortcut without a modifier key types that key into the frontmost app."
+                    cleared = false
+                    warning = Self.warning(for: key)
                 case .cleared:
                     recorded = nil
+                    cleared = true
                     warning = nil
                 case .cancelled:
-                    onDone(nil)
+                    onDone(.cancel)
                 }
             }
             .frame(width: 260, height: 44)
-            Text(warning ?? "Escape cancels, Delete clears.").font(.footnote).foregroundStyle(warning == nil ? Color.secondary : Color.orange)
+            Text(warning ?? "Escape cancels, Delete removes the shortcut.").font(.footnote).foregroundStyle(warning == nil ? Color.secondary : Color.orange)
             HStack {
-                Button("Cancel") { onDone(nil) }
-                Button("Use") { onDone(recorded) }.disabled(recorded == nil)
+                Button("Cancel") { onDone(.cancel) }
+                if cleared && recorded == nil {
+                    Button("Clear") { onDone(.clear) }
+                } else {
+                    Button("Use") { if let recorded { onDone(.use(recorded)) } }
+                        .disabled(recorded == nil)
+                }
             }
         }
         .padding(20)
-        .onAppear { recorded = current }
+        .onAppear {
+            recorded = current
+            warning = current.flatMap(Self.warning(for:))
+        }
     }
 }
