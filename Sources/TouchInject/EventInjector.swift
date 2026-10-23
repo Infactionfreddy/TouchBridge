@@ -35,12 +35,10 @@ public final class EventInjector: @unchecked Sendable {
         case .moveCursor(let p):
             post(Self.mouseEvent(.mouseMoved, at: p, button: .left, clickCount: 0, source: source))
         case .click(let button, let p, let count):
-            let down: CGEventType = button == .left ? .leftMouseDown : .rightMouseDown
-            let up: CGEventType = button == .left ? .leftMouseUp : .rightMouseUp
-            let cgButton: CGMouseButton = button == .left ? .left : .right
+            let types = Self.mouseEventTypes(for: button)
             post(Self.mouseEvent(.mouseMoved, at: p, button: .left, clickCount: 0, source: source))
-            post(Self.mouseEvent(down, at: p, button: cgButton, clickCount: count, source: source))
-            post(Self.mouseEvent(up, at: p, button: cgButton, clickCount: count, source: source))
+            post(Self.mouseEvent(types.down, at: p, button: types.button, clickCount: count, source: source))
+            post(Self.mouseEvent(types.up, at: p, button: types.button, clickCount: count, source: source))
         case .drag(let phase, let p):
             switch phase {
             case .began:
@@ -122,6 +120,18 @@ public final class EventInjector: @unchecked Sendable {
     }
 
     // MARK: - Builders (static for testability)
+
+    /// CGEvent types and button for a logical button. Middle, back and forward are "other" mouse events with the
+    /// button numbers AppKit reports as `NSEvent.buttonNumber` (2, 3, 4).
+    static func mouseEventTypes(for button: MouseButton) -> (down: CGEventType, up: CGEventType, button: CGMouseButton) {
+        switch button {
+        case .left: return (.leftMouseDown, .leftMouseUp, .left)
+        case .right: return (.rightMouseDown, .rightMouseUp, .right)
+        case .middle: return (.otherMouseDown, .otherMouseUp, .center)
+        case .back: return (.otherMouseDown, .otherMouseUp, CGMouseButton(rawValue: 3) ?? .center)
+        case .forward: return (.otherMouseDown, .otherMouseUp, CGMouseButton(rawValue: 4) ?? .center)
+        }
+    }
 
     static func mouseEvent(_ type: CGEventType, at p: CGPoint, button: CGMouseButton, clickCount: Int, source: CGEventSource?) -> CGEvent? {
         guard let event = CGEvent(mouseEventSource: source, mouseType: type, mouseCursorPosition: p, mouseButton: button) else { return nil }

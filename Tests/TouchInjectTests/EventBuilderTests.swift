@@ -85,4 +85,18 @@ import TouchCore
         #expect(abs(remainder.dx - 0.2) < 1e-9)
         #expect(abs(remainder.dy + 0.2) < 1e-9)
     }
+
+    @Test func otherMouseButtonsUseOtherEventsWithButtonNumbers() throws {
+        let left = EventInjector.mouseEventTypes(for: .left)
+        #expect(left.down == .leftMouseDown && left.up == .leftMouseUp && left.button == .left)
+        let right = EventInjector.mouseEventTypes(for: .right)
+        #expect(right.down == .rightMouseDown && right.up == .rightMouseUp && right.button == .right)
+        let middle = EventInjector.mouseEventTypes(for: .middle)
+        #expect(middle.down == .otherMouseDown && middle.up == .otherMouseUp && middle.button.rawValue == 2)
+        #expect(EventInjector.mouseEventTypes(for: .back).button.rawValue == 3)
+        #expect(EventInjector.mouseEventTypes(for: .forward).button.rawValue == 4)
+        let e = try #require(EventInjector.mouseEvent(.otherMouseDown, at: p, button: EventInjector.mouseEventTypes(for: .back).button, clickCount: 1, source: source))
+        #expect(e.type == .otherMouseDown)
+        #expect(e.getIntegerValueField(.mouseEventButtonNumber) == 3)
+    }
 }
