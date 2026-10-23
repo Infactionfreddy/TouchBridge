@@ -50,7 +50,7 @@ Tests
 - A `CommandSink` protocol behind `EventInjector` would allow end-to-end tests from raw Elan bytes to `Command`s without CoreGraphics; the app layer has no automated coverage.
 
 Settings
-- `schemaVersion` is pinned to 1 on save; a future v2 needs real migration logic.
+- Migration exists only for schema 1 → 2 (legacy keys folded into `defaultProfile`, backup `settings.json.v1`); a later bump needs its own step in `SettingsStore` and `Settings.init(from:)`.
 - A single wrong-typed key sets the whole file aside as `.broken` (spec 7 behaviour); per-key lenient decoding with logging is an option.
 
 ## 3. Decisions that deviate from the plan text
