@@ -31,12 +31,12 @@ final class DevicePipeline: @unchecked Sendable {
         queue = DispatchQueue(label: "org.touchbridge.pipeline.\(id)", qos: .userInteractive)
         decoder = ReportDecoder(layout: layout)
         mapper = DisplayMapper(config: mapping)
-        tracker = TouchTracker(stuckTimeout: UInt64(settings.gesture.stuckTimeout * 1_000_000_000))
-        engine = GestureEngine(config: settings.gesture)
+        tracker = TouchTracker(stuckTimeout: UInt64(settings.effectiveProfile(for: nil).config.stuckTimeout * 1_000_000_000))
+        engine = GestureEngine(config: settings.effectiveProfile(for: nil).config)
         router = ActionRouter(naturalScrolling: settings.naturalScrolling)
         injector = EventInjector(queue: queue, momentum: MomentumGenerator(
-            decayPerFrame: settings.gesture.momentumDecayPerFrame,
-            stopVelocity: settings.gesture.momentumStopVelocity))
+            decayPerFrame: settings.effectiveProfile(for: nil).config.momentumDecayPerFrame,
+            stopVelocity: settings.effectiveProfile(for: nil).config.momentumStopVelocity))
         enabled = settings.enabled
     }
 
@@ -58,11 +58,11 @@ final class DevicePipeline: @unchecked Sendable {
 
     func updateSettings(_ settings: Settings) {
         queue.async {
-            self.engine.config = settings.gesture
+            self.engine.config = settings.effectiveProfile(for: nil).config
             self.router = ActionRouter(naturalScrolling: settings.naturalScrolling)
-            self.tracker.stuckTimeout = UInt64(settings.gesture.stuckTimeout * 1_000_000_000)
-            self.injector.momentum = MomentumGenerator(decayPerFrame: settings.gesture.momentumDecayPerFrame,
-                                                       stopVelocity: settings.gesture.momentumStopVelocity)
+            self.tracker.stuckTimeout = UInt64(settings.effectiveProfile(for: nil).config.stuckTimeout * 1_000_000_000)
+            self.injector.momentum = MomentumGenerator(decayPerFrame: settings.effectiveProfile(for: nil).config.momentumDecayPerFrame,
+                                                       stopVelocity: settings.effectiveProfile(for: nil).config.momentumStopVelocity)
             if self.enabled && !settings.enabled { self.finishGestures() }
             self.enabled = settings.enabled
         }

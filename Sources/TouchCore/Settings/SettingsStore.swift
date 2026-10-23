@@ -19,10 +19,22 @@ public struct SettingsStore: Sendable {
         directory.appendingPathComponent("settings.json")
     }
 
+    private struct SchemaProbe: Decodable { var schemaVersion: Int? }
+
+    /// Missing file → defaults. Older schema → migrated by `Settings.init(from:)`, the original copied to
+    /// `settings.json.v<N>`, the result saved. Unreadable file → set aside as `.broken`, defaults written.
     public func load() -> Settings {
         guard let data = try? Data(contentsOf: fileURL) else { return Settings() }
         do {
-            return try JSONDecoder().decode(Settings.self, from: data)
+            let settings = try JSONDecoder().decode(Settings.self, from: data)
+            let version = (try? JSONDecoder().decode(SchemaProbe.self, from: data).schemaVersion) ?? 1
+            if version < Settings.currentSchemaVersion {
+                let backup = URL(fileURLWithPath: fileURL.path + ".v\(version)")
+                try? FileManager.default.removeItem(at: backup)
+                try? FileManager.default.copyItem(at: fileURL, to: backup)
+                try? save(settings)
+            }
+            return settings
         } catch {
             let broken = URL(fileURLWithPath: fileURL.path + ".broken")
             try? FileManager.default.removeItem(at: broken)
