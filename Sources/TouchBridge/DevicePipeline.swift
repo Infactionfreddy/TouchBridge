@@ -33,7 +33,7 @@ final class DevicePipeline: @unchecked Sendable {
         mapper = DisplayMapper(config: mapping)
         tracker = TouchTracker(stuckTimeout: UInt64(settings.effectiveProfile(for: nil).config.stuckTimeout * 1_000_000_000))
         engine = GestureEngine(config: settings.effectiveProfile(for: nil).config)
-        router = ActionRouter(naturalScrolling: settings.naturalScrolling)
+        router = ActionRouter(profile: settings.effectiveProfile(for: nil))
         injector = EventInjector(queue: queue, momentum: MomentumGenerator(
             decayPerFrame: settings.effectiveProfile(for: nil).config.momentumDecayPerFrame,
             stopVelocity: settings.effectiveProfile(for: nil).config.momentumStopVelocity))
@@ -59,7 +59,7 @@ final class DevicePipeline: @unchecked Sendable {
     func updateSettings(_ settings: Settings) {
         queue.async {
             self.engine.config = settings.effectiveProfile(for: nil).config
-            self.router = ActionRouter(naturalScrolling: settings.naturalScrolling)
+            self.router = ActionRouter(profile: settings.effectiveProfile(for: nil))
             self.tracker.stuckTimeout = UInt64(settings.effectiveProfile(for: nil).config.stuckTimeout * 1_000_000_000)
             self.injector.momentum = MomentumGenerator(decayPerFrame: settings.effectiveProfile(for: nil).config.momentumDecayPerFrame,
                                                        stopVelocity: settings.effectiveProfile(for: nil).config.momentumStopVelocity)
