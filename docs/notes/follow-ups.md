@@ -1,6 +1,6 @@
 # Follow-ups after the milestone 1/2 implementation
 
-State (2026-10-21): all 17 plan tasks implemented, reviewed and merged to `main`; 109 unit tests green including the recorded-panel test. The seize spike passed on the reference panel and uncovered that the panel needs its Feature reports read after every open (`docs/notes/seize-spike.md`); Plan B is not needed. This file lists what is still open, in the order it should happen.
+State (2026-10-21): all 17 plan tasks implemented, reviewed and merged to `main`; 109 unit tests green including the recorded-panel test. The seize spike passed on the reference panel and uncovered that the panel needs its Feature reports read after every open (`docs/notes/seize-spike.md`); Plan B is not needed. Part A (gesture profiles and settings window) is implemented and awaits acceptance on the panel; Parts B (multi-finger taps/drags) and C (edge swipes, squeeze/splay, discrete pinch/rotate) are next. This file lists what is still open, in the order it should happen.
 
 ## 1. Hardware acceptance (needs the Elan panel and a person)
 
@@ -12,6 +12,16 @@ State (2026-10-21): all 17 plan tasks implemented, reviewed and merged to `main`
 6. If taps land mirrored or rotated, set `calibrations.<serial>.orientation` in `settings.json` (0/90/180/270). The default comes from `CGDisplayRotation`, whose sign relative to `DisplayMapper` is unverified.
 7. If `magnify`/`rotate` never arrive while scroll and clicks do, follow the fallback order in plan Task 16 step 4 (drop fields 50/101, then set the event type directly) and record the working combination in `GestureEventFields.swift`.
 8. Tag `v0.1.0` only after the checklists pass.
+
+## Part A acceptance (needs the panel)
+
+1. Launch: the old settings.json is migrated; `settings.json.v1` sits next to it; natural scrolling and tuning from before still apply.
+2. Settings… → "+" → Safari. Gestures: set "Three finger swipe left" to the keyboard shortcut ⌘[. In Safari a three-finger swipe left goes back; in Finder it still switches Spaces. The header shows "active profile: Safari" while Safari is frontmost.
+3. Tuning in the Safari profile: tick Override on "Long press duration", set 1.0. A long press opens the context menu later in Safari, unchanged in Finder.
+4. Set "Two finger tap" to Mouse click → Middle in the Safari profile: a two-finger tap on a link opens it in a new tab.
+5. Default profile: switch "Natural scrolling" off in the Gestures row of "Two finger drag"; the menu toggle follows, and scrolling inverts everywhere without a profile.
+6. Remove the Safari profile ("−", confirm): Safari uses the default profile again.
+7. Quit and relaunch: all settings persist; `log stream --predicate 'subsystem == "org.touchbridge"'` shows no errors.
 
 ## 2. Code follow-ups found in review (none blocks acceptance)
 

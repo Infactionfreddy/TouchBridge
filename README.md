@@ -41,7 +41,11 @@ On first launch grant **Input Monitoring** and **Accessibility** in the window t
 
 ## Settings
 
-`~/Library/Application Support/TouchBridge/settings.json`, editable while the app runs ("Open settings file" in the menu). Keys: `schemaVersion` (always 1, written by the app), `enabled`, `displaySelection` (`{"auto":{}}` or `{"display":{"uuid":"…"}}`), `naturalScrolling`, `gesture` (thresholds in seconds and points), `calibrations` (per device serial: `orientation` 0/90/180/270, `scaleX`, `scaleY`, `offsetX`, `offsetY`), `launchAtLogin`. Out-of-range gesture values are clamped when the file is read (durations to 0–10 s, `momentumDecayPerFrame` to 0–0.999, `rotateThreshold` to 0–180°, distances and velocities to ≥ 0); `orientation` is reduced modulo 360 and becomes 0 unless it is 0, 90, 180 or 270.
+Open "Settings…" from the menu bar icon. The sidebar lists the **Default** profile and one profile per application (add one with "+", choosing the app in /Applications). The profile of the frontmost application applies; TouchBridge itself and apps without a profile use Default.
+
+- **Gestures**: every gesture has an on/off switch and an action: pass through (the built-in behaviour), none, a mouse click (left, right, middle, back, forward; single to triple), a keyboard shortcut (recorded by pressing it), a system action (Mission Control, App Exposé, Space left/right, Show desktop) or a file/application to open. Two-finger drag additionally has natural scrolling and momentum switches. Rows marked "Default" in an application profile inherit from the default profile; "Reset to default" in the context menu removes an override. Greyed-out gestures are not recognized yet (they come with later versions).
+- **Tuning**: all engine thresholds and durations (tap and double-tap timing, long-press duration, scroll classification, pinch and rotate thresholds, momentum, swipe distance and duration, stuck-contact timeout). In an application profile, tick "Override" to give the app its own value.
+- **Advanced**: opens `~/Library/Application Support/TouchBridge/settings.json` (schema 2). The file holds `enabled`, `displaySelection` (`{"auto":{}}` or `{"display":{"uuid":"…"}}`), `calibrations` (per device serial: `orientation` 0/90/180/270, `scaleX`, `scaleY`, `offsetX`, `offsetY`), `launchAtLogin`, `defaultProfile` and `appProfiles` (each with `bundleID`, `displayName`, `bindings` keyed by gesture name, `config` overrides). A schema-1 file from an earlier version is migrated on launch and kept as `settings.json.v1`.
 
 ## Troubleshooting
 
@@ -49,6 +53,8 @@ On first launch grant **Input Monitoring** and **Accessibility** in the window t
 - Taps land mirrored or rotated: set `calibrations.<serial>.orientation` to 90, 180 or 270.
 - Pinch does nothing in an app: open "Gesture Identifier…" from the menu and perform the gesture on it; if `magnify` lines appear there, the app does not support trackpad zoom.
 - Touching does nothing although the status says exclusive: check the log for `read feature report` lines. The panel switches to multitouch reporting only after its Feature reports were read; without them it sends mouse reports only (see `docs/notes/seize-spike.md`).
+- A gesture does nothing in one app only: open Settings… and check that app's profile; "Restore defaults" resets it. The header shows which profile is active for the frontmost app.
+- A shortcut without a modifier (e.g. "A") types into the frontmost app; use ⌘/⌥/⌃ combinations.
 - Logs: `log stream --predicate 'subsystem == "org.touchbridge"' --level info`
 - `swift test` fails at codesign with "resource fork, Finder information, or similar detritus not allowed": run `swift test --scratch-path /tmp/touchbridge-build` or `xattr -cr .build` first (Finder attributes under ~/Documents).
 
