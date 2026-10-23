@@ -39,6 +39,11 @@ public final class EventInjector: @unchecked Sendable {
             post(Self.mouseEvent(.mouseMoved, at: p, button: .left, clickCount: 0, source: source))
             post(Self.mouseEvent(types.down, at: p, button: types.button, clickCount: count, source: source))
             post(Self.mouseEvent(types.up, at: p, button: types.button, clickCount: count, source: source))
+        case .clickAtCursor(let button, let count):
+            let location = CGEvent(source: nil)?.location ?? .zero
+            let types = Self.mouseEventTypes(for: button)
+            post(Self.mouseEvent(types.down, at: location, button: types.button, clickCount: count, source: source))
+            post(Self.mouseEvent(types.up, at: location, button: types.button, clickCount: count, source: source))
         case .drag(let phase, let p):
             switch phase {
             case .began:

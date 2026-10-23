@@ -100,17 +100,16 @@ import CoreGraphics
         #expect(r.route(.click(button: .left, at: pt(1, 2), count: 2, source: .tap), context: ctx) == [.click(.left, pt(1, 2), 2)])
     }
 
-    @Test func swipesTakeKeystrokesFilesAndClicksAtTheCursor() {
+    @Test func swipesTakeKeystrokesFilesAndClicksAtThePointer() {
         var r = ActionRouter(profile: profile([
             .threeFingerSwipeLeft: GestureBinding(action: .keystroke(key: KeyCommand(keyCode: 33, command: true))),
             .fourFingerSwipeUp: GestureBinding(action: .openFile(path: "/Applications/Safari.app")),
             .threeFingerSwipeDown: GestureBinding(action: .mouseClick(button: .back, count: 1)),
             .fourFingerSwipeDown: GestureBinding(action: .passThrough),   // no native swipe: same as none
         ]))
-        _ = r.route(.moveCursor(to: pt(400, 300)), context: ctx)
         #expect(r.route(.swipe(fingers: 3, direction: .left), context: ctx) == [.key(KeyCommand(keyCode: 33, command: true))])
         #expect(r.route(.swipe(fingers: 4, direction: .up), context: ctx) == [.openFile("/Applications/Safari.app")])
-        #expect(r.route(.swipe(fingers: 3, direction: .down), context: ctx) == [.click(.back, pt(400, 300), 1)])
+        #expect(r.route(.swipe(fingers: 3, direction: .down), context: ctx) == [.clickAtCursor(.back, 1)])
         #expect(r.route(.swipe(fingers: 4, direction: .down), context: ctx) == [])
     }
 
@@ -135,5 +134,26 @@ import CoreGraphics
         #expect(new.route(.scrollMomentum(velocity: CGVector(dx: 0, dy: 300), at: pt(0, 0)), context: ctx) == [])
         // the next scroll uses the new profile
         #expect(new.route(.scroll(phase: .began, delta: .zero, at: pt(0, 0)), context: ctx) == [.scroll(.began, .zero, pt(0, 0))])
+    }
+
+    @Test func scrollSignIsLatchedAtBegan() {
+        var natural = ActionRouter(profile: .builtIn)
+        _ = natural.route(.scroll(phase: .began, delta: .zero, at: pt(0, 0)), context: ctx)
+        var flipped = ActionRouter(profile: profile([.twoFingerDrag: GestureBinding(action: .passThrough, naturalScrolling: false, momentum: true)]), continuing: natural)
+        #expect(flipped.route(.scroll(phase: .changed, delta: CGVector(dx: 0, dy: 5), at: pt(0, 0)), context: ctx)
+                == [.scroll(.changed, CGVector(dx: 0, dy: 5), pt(0, 0))])
+        #expect(flipped.route(.scrollMomentum(velocity: CGVector(dx: 0, dy: 300), at: pt(0, 0)), context: ctx)
+                == [.scrollMomentum(CGVector(dx: 0, dy: 300), pt(0, 0))])
+        _ = flipped.route(.scroll(phase: .ended, delta: .zero, at: pt(0, 0)), context: ctx)
+        _ = flipped.route(.scroll(phase: .began, delta: .zero, at: pt(0, 0)), context: ctx)
+        #expect(flipped.route(.scroll(phase: .changed, delta: CGVector(dx: 0, dy: 5), at: pt(0, 0)), context: ctx)
+                == [.scroll(.changed, CGVector(dx: 0, dy: -5), pt(0, 0))])
+    }
+
+    @Test func mouseClickOnDragFiresAtTheBeganPoint() {
+        var r = ActionRouter(profile: profile([.drag: GestureBinding(action: .mouseClick(button: .middle, count: 1))]))
+        #expect(r.route(.drag(phase: .began, to: pt(7, 8)), context: ctx) == [.click(.middle, pt(7, 8), 1)])
+        #expect(r.route(.drag(phase: .changed, to: pt(9, 8)), context: ctx) == [])
+        #expect(r.route(.drag(phase: .ended, to: pt(9, 8)), context: ctx) == [])
     }
 }

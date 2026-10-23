@@ -10,8 +10,8 @@ public struct ActionRouter: Sendable {
     /// Continuous kinds whose last `began` was not passed through. Magnify and rotate are tracked under
     /// `.spread` and `.rotateLeft` respectively, because their direction is only known from `changed` on.
     private(set) var suppressed: Set<GestureKind> = []
-    /// Last cursor position seen; mouse clicks bound to swipes happen here.
-    private var cursor: CGPoint = .zero
+    /// Scroll direction latched at the last scroll `began`.
+    private var activeScrollSign: Double = 1
 
     public init(profile: EffectiveProfile) {
         self.profile = profile
@@ -21,16 +21,14 @@ public struct ActionRouter: Sendable {
     public init(profile: EffectiveProfile, continuing previous: ActionRouter) {
         self.profile = profile
         self.suppressed = previous.suppressed
-        self.cursor = previous.cursor
+        self.activeScrollSign = previous.activeScrollSign
     }
 
     public mutating func route(_ action: Action, context: RouterContext) -> [Command] {
         switch action {
         case .moveCursor(let p):
-            cursor = p
             return [.moveCursor(p)]
         case .click(let button, let p, let count, let source):
-            cursor = p
             let kind: GestureKind
             switch source {
             case .tap: kind = count >= 2 ? .doubleTap : .tap
@@ -39,17 +37,17 @@ public struct ActionRouter: Sendable {
             }
             return discrete(kind, passThrough: [.click(button, p, count)], at: p)
         case .drag(let phase, let p):
-            cursor = p
             return continuous(.drag, phase: phase, at: p) { [.drag(phase, p)] }
         case .scroll(let phase, let delta, let p):
-            let sign = scrollSign
+            if phase == .began { activeScrollSign = scrollSign }
+            let sign = activeScrollSign
             return continuous(.twoFingerDrag, phase: phase, at: p) {
                 [.scroll(phase, CGVector(dx: delta.dx * sign, dy: delta.dy * sign), p)]
             }
         case .scrollMomentum(let v, let p):
             let binding = profile.binding(.twoFingerDrag)
             guard !suppressed.contains(.twoFingerDrag), binding.enabled, binding.action == .passThrough, binding.momentum ?? true else { return [] }
-            let sign = scrollSign
+            let sign = activeScrollSign
             return [.scrollMomentum(CGVector(dx: v.dx * sign, dy: v.dy * sign), p)]
         case .cancelMomentum:
             return [.cancelMomentum]
@@ -59,7 +57,7 @@ public struct ActionRouter: Sendable {
             return twoWay(key: .rotateLeft, phase: phase, value: degrees, positive: .rotateLeft, negative: .rotateRight) { [.rotate(phase, degrees, p)] }
         case .swipe(let fingers, let direction):
             guard let kind = GestureKind.swipe(fingers: fingers, direction: direction) else { return [] }
-            return discrete(kind, passThrough: [], at: cursor)   // swipes have no native behaviour
+            return discrete(kind, passThrough: [], at: nil)   // swipes have no native behaviour
         }
     }
 
@@ -67,17 +65,19 @@ public struct ActionRouter: Sendable {
         (profile.binding(.twoFingerDrag).naturalScrolling ?? true) ? 1 : -1
     }
 
-    private func discrete(_ kind: GestureKind, passThrough: [Command], at p: CGPoint) -> [Command] {
+    private func discrete(_ kind: GestureKind, passThrough: [Command], at p: CGPoint?) -> [Command] {
         let binding = profile.binding(kind)
         guard binding.enabled else { return [] }
         return commands(for: binding.action, passThrough: passThrough, at: p)
     }
 
-    private func commands(for action: GestureAction, passThrough: [Command], at p: CGPoint) -> [Command] {
+    private func commands(for action: GestureAction, passThrough: [Command], at p: CGPoint?) -> [Command] {
         switch action {
         case .none: return []
         case .passThrough: return passThrough
-        case .mouseClick(let button, let count): return [.click(button, p, count)]
+        case .mouseClick(let button, let count):
+            if let p { return [.click(button, p, count)] }
+            return [.clickAtCursor(button, count)]
         case .keystroke(let key): return [.key(key)]
         case .systemAction(let system): return [.key(system.keyCommand)]
         case .openFile(let path): return [.openFile(path)]

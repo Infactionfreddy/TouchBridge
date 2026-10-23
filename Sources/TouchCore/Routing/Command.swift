@@ -28,6 +28,8 @@ public struct KeyCommand: Equatable, Sendable, Codable {
 public enum Command: Equatable, Sendable {
     case moveCursor(CGPoint)
     case click(MouseButton, CGPoint, Int)
+    /// Click at the pointer's current position (used for clicks bound to gestures that have no position of their own, such as swipes).
+    case clickAtCursor(MouseButton, Int)
     case drag(GesturePhase, CGPoint)
     case scroll(GesturePhase, CGVector, CGPoint)
     case scrollMomentum(CGVector, CGPoint)
