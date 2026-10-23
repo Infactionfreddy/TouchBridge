@@ -46,7 +46,7 @@ struct GestureRow: View {
                        onChoose: { action in store(binding) { $0.action = action } },
                        onRecordShortcut: { recordingShortcut = true })
                 .frame(width: 230, alignment: .leading)
-            if case .openFile(let path) = binding.action, !FileManager.default.fileExists(atPath: path) {
+            if case .openFile(let path) = binding.action, !FileManager.default.fileExists(atPath: (path as NSString).expandingTildeInPath) {
                 Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange).help("File not found: \(path)")
             }
             if kind == .twoFingerDrag {

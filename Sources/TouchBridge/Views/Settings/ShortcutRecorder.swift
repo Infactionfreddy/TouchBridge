@@ -74,14 +74,15 @@ final class RecorderNSView: NSView {
     }
 
     override func keyDown(with event: NSEvent) {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let hasModifier = !flags.isDisjoint(with: [.command, .option, .control, .shift])
         switch event.keyCode {
         case 53:
             onResult?(.cancelled)
-        case 51, 117:
+        case 51, 117 where !hasModifier:
             current = nil
             onResult?(.cleared)
         default:
-            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             let key = KeyCommand(keyCode: event.keyCode,
                                  control: flags.contains(.control), option: flags.contains(.option),
                                  shift: flags.contains(.shift), command: flags.contains(.command))

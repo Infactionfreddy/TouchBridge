@@ -15,6 +15,15 @@ import Testing
                               config: config)
     }
 
+    @Test func appBindingInheritsUnsetScrollOptionsFromDefaultProfile() {
+        let def = GestureProfile(bindings: [.twoFingerDrag: GestureBinding(action: .passThrough, naturalScrolling: false, momentum: nil)])
+        let app = GestureProfile(bundleID: "com.apple.Safari", displayName: "Safari",
+                                 bindings: [.twoFingerDrag: GestureBinding(action: .passThrough)])
+        let e = ProfileResolver.effective(for: "com.apple.Safari", defaultProfile: def, appProfiles: [app])
+        #expect(e.binding(.twoFingerDrag).naturalScrolling == false)
+        #expect(e.binding(.twoFingerDrag).momentum == true)   // from built-in via the default profile
+    }
+
     @Test func appProfileOverridesDefaultWhichOverridesBuiltIn() {
         let e = ProfileResolver.effective(for: "com.apple.Safari", defaultProfile: defaultProfile, appProfiles: [safari])
         #expect(e.profileID == "com.apple.Safari")

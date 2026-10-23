@@ -32,6 +32,21 @@ import CoreGraphics
         #expect(r.route(.swipe(fingers: 5, direction: .up), context: ctx) == [])   // not recognized: none
     }
 
+    @Test func suppressedDragKeepsMovingTheCursor() {
+        var none = ActionRouter(profile: profile([.drag: GestureBinding(action: .none)]))
+        #expect(none.route(.drag(phase: .began, to: pt(1, 1)), context: ctx) == [])
+        #expect(none.route(.drag(phase: .changed, to: pt(2, 3)), context: ctx) == [.moveCursor(pt(2, 3))])
+        #expect(none.route(.drag(phase: .ended, to: pt(4, 5)), context: ctx) == [.moveCursor(pt(4, 5))])
+        #expect(none.route(.drag(phase: .cancelled, to: pt(6, 7)), context: ctx) == [])
+    }
+
+    @Test func dragBoundToKeystrokeFiresOnceAndKeepsMoving() {
+        let key = KeyCommand(keyCode: 33, command: true)
+        var r = ActionRouter(profile: profile([.drag: GestureBinding(action: .keystroke(key: key))]))
+        #expect(r.route(.drag(phase: .began, to: pt(1, 1)), context: ctx) == [.key(key)])
+        #expect(r.route(.drag(phase: .changed, to: pt(2, 3)), context: ctx) == [.moveCursor(pt(2, 3))])
+    }
+
     @Test func naturalScrollingKeepsSignAndClassicInverts() {
         var natural = ActionRouter(profile: .builtIn)
         _ = natural.route(.scroll(phase: .began, delta: .zero, at: pt(0, 0)), context: ctx)
@@ -60,8 +75,8 @@ import CoreGraphics
     @Test func disabledOrNoneDropsTheWholeContinuousGesture() {
         var r = ActionRouter(profile: profile([.drag: GestureBinding(enabled: false), .twoFingerDrag: GestureBinding(action: .none)]))
         #expect(r.route(.drag(phase: .began, to: pt(1, 1)), context: ctx) == [])
-        #expect(r.route(.drag(phase: .changed, to: pt(2, 1)), context: ctx) == [])
-        #expect(r.route(.drag(phase: .ended, to: pt(2, 1)), context: ctx) == [])
+        #expect(r.route(.drag(phase: .changed, to: pt(2, 1)), context: ctx) == [.moveCursor(pt(2, 1))])
+        #expect(r.route(.drag(phase: .ended, to: pt(2, 1)), context: ctx) == [.moveCursor(pt(2, 1))])
         #expect(r.route(.scroll(phase: .began, delta: .zero, at: pt(0, 0)), context: ctx) == [])
         #expect(r.route(.scroll(phase: .changed, delta: CGVector(dx: 0, dy: 5), at: pt(0, 0)), context: ctx) == [])
         #expect(r.route(.scroll(phase: .ended, delta: .zero, at: pt(0, 0)), context: ctx) == [])
@@ -74,8 +89,8 @@ import CoreGraphics
         let key = KeyCommand(keyCode: 49)   // space
         var r = ActionRouter(profile: profile([.drag: GestureBinding(action: .keystroke(key: key))]))
         #expect(r.route(.drag(phase: .began, to: pt(1, 1)), context: ctx) == [.key(key)])
-        #expect(r.route(.drag(phase: .changed, to: pt(2, 1)), context: ctx) == [])
-        #expect(r.route(.drag(phase: .ended, to: pt(2, 1)), context: ctx) == [])
+        #expect(r.route(.drag(phase: .changed, to: pt(2, 1)), context: ctx) == [.moveCursor(pt(2, 1))])
+        #expect(r.route(.drag(phase: .ended, to: pt(2, 1)), context: ctx) == [.moveCursor(pt(2, 1))])
         // the next drag decides again
         #expect(r.route(.drag(phase: .began, to: pt(1, 1)), context: ctx) == [.key(key)])
     }
@@ -153,7 +168,7 @@ import CoreGraphics
     @Test func mouseClickOnDragFiresAtTheBeganPoint() {
         var r = ActionRouter(profile: profile([.drag: GestureBinding(action: .mouseClick(button: .middle, count: 1))]))
         #expect(r.route(.drag(phase: .began, to: pt(7, 8)), context: ctx) == [.click(.middle, pt(7, 8), 1)])
-        #expect(r.route(.drag(phase: .changed, to: pt(9, 8)), context: ctx) == [])
-        #expect(r.route(.drag(phase: .ended, to: pt(9, 8)), context: ctx) == [])
+        #expect(r.route(.drag(phase: .changed, to: pt(9, 8)), context: ctx) == [.moveCursor(pt(9, 8))])
+        #expect(r.route(.drag(phase: .ended, to: pt(9, 8)), context: ctx) == [.moveCursor(pt(9, 8))])
     }
 }

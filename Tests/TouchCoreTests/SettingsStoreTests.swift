@@ -70,7 +70,8 @@ import Foundation
         try store.save(loaded)
         let text = try String(contentsOf: store.fileURL, encoding: .utf8)
         #expect(text.contains("\"schemaVersion\" : 2"))
-        #expect(!FileManager.default.fileExists(atPath: store.fileURL.path + ".v7"))
+        let backup = URL(fileURLWithPath: store.fileURL.path + ".v7")
+        #expect(try String(contentsOf: backup, encoding: .utf8) == "{\"schemaVersion\": 7, \"enabled\": false}")
     }
 
     @Test func legacySchemaOneFileIsMigratedAndBackedUp() throws {

@@ -22,18 +22,29 @@ public struct EffectiveProfile: Equatable, Sendable {
     public static let builtIn = ProfileResolver.effective(for: nil, defaultProfile: GestureProfile(), appProfiles: [])
 }
 
+private extension GestureBinding {
+    /// This binding with unset per-gesture options taken from the layer below.
+    func filled(from below: GestureBinding) -> GestureBinding {
+        var result = self
+        result.naturalScrolling = naturalScrolling ?? below.naturalScrolling
+        result.momentum = momentum ?? below.momentum
+        return result
+    }
+}
+
 /// Resolves built-in defaults ⟵ default profile ⟵ app profile. Pure and deterministic.
 public enum ProfileResolver {
     public static func effective(for bundleID: String?, defaultProfile: GestureProfile, appProfiles: [GestureProfile]) -> EffectiveProfile {
         var bindings: [GestureKind: GestureBinding] = [:]
         for kind in GestureKind.allCases {
-            bindings[kind] = defaultProfile.bindings[kind] ?? .builtIn(for: kind)
+            let builtIn = GestureBinding.builtIn(for: kind)
+            bindings[kind] = defaultProfile.bindings[kind].map { $0.filled(from: builtIn) } ?? builtIn
         }
         var config = defaultProfile.config.apply(to: GestureConfig())
         var id = GestureProfile.defaultID
         var name = defaultProfile.displayName
         if let bundleID, let app = appProfiles.first(where: { $0.bundleID == bundleID }) {
-            for (kind, binding) in app.bindings { bindings[kind] = binding }
+            for (kind, binding) in app.bindings { bindings[kind] = binding.filled(from: bindings[kind] ?? .builtIn(for: kind)) }
             config = app.config.apply(to: config)
             id = app.id
             name = app.displayName

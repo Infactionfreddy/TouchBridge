@@ -37,7 +37,11 @@ public struct ActionRouter: Sendable {
             }
             return discrete(kind, passThrough: [.click(button, p, count)], at: p)
         case .drag(let phase, let p):
-            return continuous(.drag, phase: phase, at: p) { [.drag(phase, p)] }
+            let commands = continuous(.drag, phase: phase, at: p) { [.drag(phase, p)] }
+            // A suppressed drag (none, disabled or a discrete action) still moves the pointer with the finger;
+            // the engine only emits `.moveCursor` at finger-down.
+            if phase != .began, phase != .cancelled, suppressed.contains(.drag) { return [.moveCursor(p)] }
+            return commands
         case .scroll(let phase, let delta, let p):
             if phase == .began { activeScrollSign = scrollSign }
             let sign = activeScrollSign
@@ -85,7 +89,8 @@ public struct ActionRouter: Sendable {
     }
 
     /// `began` decides: pass-through passes every phase, none/disabled drops every phase, a discrete action
-    /// fires once and drops the rest.
+    /// fires once and drops the rest. (A suppressed `.drag` is the exception: `route` turns its `changed` and
+    /// `ended` phases into `.moveCursor`.)
     private mutating func continuous(_ kind: GestureKind, phase: GesturePhase, at p: CGPoint, passThrough: () -> [Command]) -> [Command] {
         if phase == .began {
             let binding = profile.binding(kind)
