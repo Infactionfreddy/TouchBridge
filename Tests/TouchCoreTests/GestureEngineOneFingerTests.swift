@@ -8,7 +8,7 @@ import CoreGraphics
         var e = GestureEngine()
         #expect(e.update(touches: [touch(1, 100, 100, start: ms(0), now: ms(0))], timestamp: ms(0)) == [.moveCursor(to: pt(100, 100))])
         #expect(e.update(touches: [touch(1, 102, 101, start: ms(0), now: ms(60))], timestamp: ms(60)).isEmpty)
-        #expect(e.update(touches: [], timestamp: ms(120)) == [.click(button: .left, at: pt(102, 101), count: 1)])
+        #expect(e.update(touches: [], timestamp: ms(120)) == [.click(button: .left, at: pt(102, 101), count: 1, source: .tap)])
         #expect(e.isIdle)
     }
 
@@ -17,10 +17,10 @@ import CoreGraphics
         _ = e.update(touches: [touch(1, 100, 100)], timestamp: ms(0))
         _ = e.update(touches: [], timestamp: ms(50))
         _ = e.update(touches: [touch(2, 103, 100)], timestamp: ms(200))
-        #expect(e.update(touches: [], timestamp: ms(250)) == [.click(button: .left, at: pt(103, 100), count: 2)])
+        #expect(e.update(touches: [], timestamp: ms(250)) == [.click(button: .left, at: pt(103, 100), count: 2, source: .tap)])
         // a third tap after the interval is a single click again
         _ = e.update(touches: [touch(3, 103, 100)], timestamp: ms(900))
-        #expect(e.update(touches: [], timestamp: ms(950)) == [.click(button: .left, at: pt(103, 100), count: 1)])
+        #expect(e.update(touches: [], timestamp: ms(950)) == [.click(button: .left, at: pt(103, 100), count: 1, source: .tap)])
     }
 
     @Test func secondTapFarAwayIsSingleClick() {
@@ -28,7 +28,7 @@ import CoreGraphics
         _ = e.update(touches: [touch(1, 100, 100)], timestamp: ms(0))
         _ = e.update(touches: [], timestamp: ms(50))
         _ = e.update(touches: [touch(2, 400, 100)], timestamp: ms(150))
-        #expect(e.update(touches: [], timestamp: ms(200)) == [.click(button: .left, at: pt(400, 100), count: 1)])
+        #expect(e.update(touches: [], timestamp: ms(200)) == [.click(button: .left, at: pt(400, 100), count: 1, source: .tap)])
     }
 
     @Test func dragAfterMovement() {
@@ -44,14 +44,14 @@ import CoreGraphics
         var e = GestureEngine()
         _ = e.update(touches: [touch(1, 100, 100)], timestamp: ms(0))
         _ = e.update(touches: [touch(1, 101, 100)], timestamp: ms(400))
-        #expect(e.update(touches: [], timestamp: ms(450)) == [.click(button: .left, at: pt(101, 100), count: 1)])
+        #expect(e.update(touches: [], timestamp: ms(450)) == [.click(button: .left, at: pt(101, 100), count: 1, source: .tap)])
     }
 
     @Test func longPressRightClickViaTick() {
         var e = GestureEngine()
         _ = e.update(touches: [touch(1, 100, 100)], timestamp: ms(0))
         #expect(e.tick(ms(500)).isEmpty)
-        #expect(e.tick(ms(620)) == [.click(button: .right, at: pt(100, 100), count: 1)])
+        #expect(e.tick(ms(620)) == [.click(button: .right, at: pt(100, 100), count: 1, source: .longPress)])
         #expect(e.update(touches: [touch(1, 130, 100)], timestamp: ms(700)).isEmpty)   // consumed: no drag
         #expect(e.update(touches: [], timestamp: ms(800)).isEmpty)                      // no left click
         #expect(e.isIdle)
@@ -60,15 +60,15 @@ import CoreGraphics
     @Test func longPressRightClickViaFrame() {
         var e = GestureEngine()
         _ = e.update(touches: [touch(1, 100, 100)], timestamp: ms(0))
-        #expect(e.update(touches: [touch(1, 100, 100)], timestamp: ms(650)) == [.click(button: .right, at: pt(100, 100), count: 1)])
+        #expect(e.update(touches: [touch(1, 100, 100)], timestamp: ms(650)) == [.click(button: .right, at: pt(100, 100), count: 1, source: .longPress)])
     }
 
     @Test func reusedIDAfterLiftStartsFreshTap() {
         var e = GestureEngine()
         _ = e.update(touches: [touch(3, 100, 100)], timestamp: ms(0))
-        #expect(e.update(touches: [], timestamp: ms(50)) == [.click(button: .left, at: pt(100, 100), count: 1)])
+        #expect(e.update(touches: [], timestamp: ms(50)) == [.click(button: .left, at: pt(100, 100), count: 1, source: .tap)])
         #expect(e.update(touches: [touch(3, 900, 900, start: ms(60), now: ms(60))], timestamp: ms(60)) == [.moveCursor(to: pt(900, 900))])
-        #expect(e.update(touches: [], timestamp: ms(100)) == [.click(button: .left, at: pt(900, 900), count: 1)])
+        #expect(e.update(touches: [], timestamp: ms(100)) == [.click(button: .left, at: pt(900, 900), count: 1, source: .tap)])
     }
 
     @Test func resetCancelsDrag() {
@@ -82,8 +82,8 @@ import CoreGraphics
     @Test func contactReplacedDuringTapClicksAndRestarts() {
         var e = GestureEngine()
         #expect(e.update(touches: [touch(1, 100, 100)], timestamp: ms(0)) == [.moveCursor(to: pt(100, 100))])
-        #expect(e.update(touches: [touch(2, 300, 100, start: ms(50), now: ms(50))], timestamp: ms(50)) == [.click(button: .left, at: pt(100, 100), count: 1), .moveCursor(to: pt(300, 100))])
-        #expect(e.update(touches: [], timestamp: ms(100)) == [.click(button: .left, at: pt(300, 100), count: 1)])
+        #expect(e.update(touches: [touch(2, 300, 100, start: ms(50), now: ms(50))], timestamp: ms(50)) == [.click(button: .left, at: pt(100, 100), count: 1, source: .tap), .moveCursor(to: pt(300, 100))])
+        #expect(e.update(touches: [], timestamp: ms(100)) == [.click(button: .left, at: pt(300, 100), count: 1, source: .tap)])
     }
 
     @Test func contactReplacedDuringDragEndsDragAndRestarts() {

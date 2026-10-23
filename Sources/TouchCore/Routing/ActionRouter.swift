@@ -15,7 +15,7 @@ public struct ActionRouter: Sendable {
         switch action {
         case .moveCursor(let p):
             return [.moveCursor(p)]
-        case .click(let button, let p, let count):
+        case .click(let button, let p, let count, _):
             return [.click(button, p, count)]
         case .drag(let phase, let p):
             return [.drag(phase, p)]

@@ -8,7 +8,7 @@ import CoreGraphics
     @Test func mouseActionsPassThrough() {
         let r = ActionRouter(naturalScrolling: true)
         #expect(r.route(.moveCursor(to: pt(1, 2)), context: ctx) == [.moveCursor(pt(1, 2))])
-        #expect(r.route(.click(button: .right, at: pt(1, 2), count: 1), context: ctx) == [.click(.right, pt(1, 2), 1)])
+        #expect(r.route(.click(button: .right, at: pt(1, 2), count: 1, source: .longPress), context: ctx) == [.click(.right, pt(1, 2), 1)])
         #expect(r.route(.drag(phase: .changed, to: pt(3, 4)), context: ctx) == [.drag(.changed, pt(3, 4))])
         #expect(r.route(.cancelMomentum, context: ctx) == [.cancelMomentum])
     }

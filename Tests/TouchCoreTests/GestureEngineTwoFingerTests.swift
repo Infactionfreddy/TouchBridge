@@ -10,7 +10,7 @@ import CoreGraphics
     @Test func twoFingerTapIsRightClick() {
         var e = GestureEngine()
         #expect(e.update(touches: pair(100, 100, 140, 100), timestamp: ms(0)).isEmpty)
-        #expect(e.update(touches: [], timestamp: ms(100)) == [.click(button: .right, at: pt(120, 100), count: 1)])
+        #expect(e.update(touches: [], timestamp: ms(100)) == [.click(button: .right, at: pt(120, 100), count: 1, source: .twoFingerTap)])
         #expect(e.isIdle)
     }
 
@@ -19,7 +19,7 @@ import CoreGraphics
         #expect(e.update(touches: [touch(1, 100, 100)], timestamp: ms(0)) == [.moveCursor(to: pt(100, 100))])
         #expect(e.update(touches: pair(100, 100, 140, 100), timestamp: ms(40)).isEmpty)
         #expect(e.update(touches: [touch(2, 140, 100)], timestamp: ms(120)).isEmpty)
-        #expect(e.update(touches: [], timestamp: ms(150)) == [.click(button: .right, at: pt(120, 100), count: 1)])
+        #expect(e.update(touches: [], timestamp: ms(150)) == [.click(button: .right, at: pt(120, 100), count: 1, source: .twoFingerTap)])
     }
 
     @Test func twoFingerHoldThenLiftIsNothing() {
@@ -195,7 +195,7 @@ import CoreGraphics
         #expect(e.update(touches: [touch(2, 140, 100)], timestamp: ms(120)).isEmpty)
         #expect(e.update(touches: [touch(2, 140, 100)], timestamp: ms(128)).isEmpty)
         #expect(e.update(touches: [touch(2, 140, 100)], timestamp: ms(136)).isEmpty)
-        #expect(e.update(touches: [], timestamp: ms(150)) == [.click(button: .right, at: pt(120, 100), count: 1)])
+        #expect(e.update(touches: [], timestamp: ms(150)) == [.click(button: .right, at: pt(120, 100), count: 1, source: .twoFingerTap)])
         #expect(e.isIdle)
     }
 

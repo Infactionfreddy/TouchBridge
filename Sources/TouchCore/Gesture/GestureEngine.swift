@@ -70,7 +70,7 @@ public struct GestureEngine: Sendable {
         case .oneFinger(_, _, let last, let startTime):
             if Geometry.seconds(from: startTime, to: timestamp) >= config.longPressDuration {
                 state = .consumed
-                return [.click(button: .right, at: last, count: 1)]
+                return [.click(button: .right, at: last, count: 1, source: .longPress)]
             }
         case .twoReleasing(_, let startTime):
             if Geometry.seconds(from: startTime, to: timestamp) > config.tapMaxDuration { state = .oneRemaining }
@@ -164,7 +164,7 @@ public struct GestureEngine: Sendable {
             if n == 0 {
                 state = .idle
                 let isTap = Geometry.seconds(from: startTime, to: timestamp) <= config.tapMaxDuration
-                return (isTap ? [.click(button: .right, at: c, count: 1)] : [], false)
+                return (isTap ? [.click(button: .right, at: c, count: 1, source: .twoFingerTap)] : [], false)
             }
             if n == 1 {
                 state = .twoReleasing(startCentroid: c, startTime: startTime)
@@ -176,7 +176,7 @@ public struct GestureEngine: Sendable {
             if n == 0 {
                 state = .idle
                 let isTap = Geometry.seconds(from: startTime, to: timestamp) <= config.tapMaxDuration
-                return (isTap ? [.click(button: .right, at: c, count: 1)] : [], false)
+                return (isTap ? [.click(button: .right, at: c, count: 1, source: .twoFingerTap)] : [], false)
             }
             state = .idle
             return ([], true)
@@ -269,7 +269,7 @@ public struct GestureEngine: Sendable {
             }
             if Geometry.seconds(from: startTime, to: timestamp) >= config.longPressDuration {
                 state = .consumed
-                return [.click(button: .right, at: p, count: 1)]
+                return [.click(button: .right, at: p, count: 1, source: .longPress)]
             }
             state = .oneFinger(id: id, start: start, last: p, startTime: startTime)
             return []
@@ -362,6 +362,6 @@ public struct GestureEngine: Sendable {
         } else {
             lastTap = TapRecord(time: timestamp, position: position)
         }
-        return [.click(button: .left, at: position, count: count)]
+        return [.click(button: .left, at: position, count: count, source: .tap)]
     }
 }
