@@ -68,6 +68,8 @@ public final class EventInjector: @unchecked Sendable {
             post(Self.gestureEvent(hidType: GestureEventFields.hidTypeRotation, phase: phase, value: degrees, at: p, source: source))
         case .key(let key):
             for event in Self.keyEvents(key, source: source) { post(event) }
+        case .openFile:
+            break  // executed by the app layer
         }
     }
 

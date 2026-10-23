@@ -2,7 +2,7 @@ import Foundation
 import CoreGraphics
 
 /// A keyboard shortcut. `keyCode` is a macOS virtual key code (kVK_*).
-public struct KeyCommand: Equatable, Sendable {
+public struct KeyCommand: Equatable, Sendable, Codable {
     public var keyCode: UInt16
     public var control: Bool
     public var option: Bool
@@ -21,6 +21,7 @@ public struct KeyCommand: Equatable, Sendable {
     public static let appExpose = KeyCommand(keyCode: 125, control: true)      // ⌃↓
     public static let spaceLeft = KeyCommand(keyCode: 123, control: true)      // ⌃←
     public static let spaceRight = KeyCommand(keyCode: 124, control: true)     // ⌃→
+    public static let showDesktop = KeyCommand(keyCode: 103)                 // F11
 }
 
 /// What the injector executes. Produced by `ActionRouter`.
@@ -34,6 +35,8 @@ public enum Command: Equatable, Sendable {
     case magnify(GesturePhase, Double, CGPoint)
     case rotate(GesturePhase, Double, CGPoint)
     case key(KeyCommand)
+    /// Opens a file or application; executed by the app layer, not the injector.
+    case openFile(String)
 }
 
 public struct RouterContext: Equatable, Sendable {
