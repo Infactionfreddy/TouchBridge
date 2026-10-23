@@ -39,20 +39,6 @@ struct SettingsView: View {
     }
 }
 
-// Replaced in Task 11.
-struct GesturesTab: View {
-    @Bindable var state: AppState
-    let profileID: String
-    var body: some View { Text("Gestures for \(profileID)") }
-}
-
-// Replaced in Task 11.
-struct TuningTab: View {
-    @Bindable var state: AppState
-    let profileID: String
-    var body: some View { Text("Tuning for \(profileID)") }
-}
-
 struct AdvancedTab: View {
     @Bindable var state: AppState
 
