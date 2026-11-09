@@ -1,75 +1,128 @@
 # TouchBridge
 
-Status: milestones 1 (core) and 2 (gestures) are implemented and unit-tested; hardware acceptance on the reference panel is pending.
+Multitouch für USB-Touchscreens unter macOS: TouchBridge übernimmt das Gerät exklusiv, verfolgt alle Finger selbst und speist Mausereignisse sowie Trackpad-Gesten systemweit in macOS ein.
 
-Multitouch for USB touch screens on macOS. macOS treats a HID touch screen as a single-touch pointer. TouchBridge takes exclusive control of the screen, tracks all contacts itself and injects mouse events and trackpad gestures system-wide, so every app receives pinch, rotate, scroll with momentum and multi-finger swipes as if they came from a trackpad.
+![Swift](https://img.shields.io/badge/Swift-6.0-orange) ![Plattform](https://img.shields.io/badge/macOS-14%2B-blue) ![Lizenz](https://img.shields.io/badge/Lizenz-MIT-green)
 
-Open source, MIT, no license keys.
+> **Status:** Meilenstein 1 (Core) und 2 (Gesten) sind implementiert und unit-getestet; die Hardware-Abnahme am Referenzpanel steht noch aus.
 
-## Requirements
+macOS behandelt einen HID-Touchscreen nur als Single-Touch-Zeiger. TouchBridge sorgt dafür, dass jede App Pinch, Rotate, Scrollen mit Momentum und Mehrfinger-Swipes erhält, als kämen sie von einem Trackpad. Open Source (MIT), keine Lizenzschlüssel.
 
-- macOS 14 or newer (developed on macOS 26)
-- A touch screen that works on Windows without a driver (HID digitizer, usage page 0x0D / usage 0x04). Reference device: Elan 10-finger controller, 24" 1080p panel.
-- Xcode 16 or newer to build
+## Features
 
-## Install
+- Automatische Erkennung von HID-Touchscreens (Usage Page 0x0D / Usage 0x04), exklusiver Zugriff (Seize), Hotplug
+- Abbildung auf das richtige Display inkl. Rotation und Kalibrierung je Geräteseriennummer
+- Ein Finger: Klick, Doppelklick, Drag, langes Halten = Rechtsklick
+- Zwei Finger: Scrollen mit Momentum, Pinch (Magnify), Rotate, Tap = Rechtsklick
+- Drei/vier Finger: Swipes für Mission Control, App Exposé, Spaces
+- Menüleisten-App mit Statusanzeige, Display-Auswahl, Login-Item und Gesture-Identifier-Fenster
+- Einstellungen als JSON-Datei, live editierbar
+- Rechte-Onboarding für Input Monitoring und Accessibility
+- Hilfswerkzeug `hidrecord` zum Aufzeichnen roher HID-Reports
 
-```
-git clone <repo>
-cd TouchBridge
-Scripts/build-app.sh          # builds and signs dist/TouchBridge.app
-Scripts/install.sh            # copies to ~/Applications and launches
-```
+### Standard-Gesten
 
-On first launch grant **Input Monitoring** and **Accessibility** in the window that opens. The status updates by itself. macOS may ask you to Quit & Reopen the app after granting Input Monitoring.
-
-## Gestures (default set)
-
-| Gesture | Result |
+| Geste | Ergebnis |
 | --- | --- |
-| Tap | Left click |
-| Double tap | Double click |
-| Press and move | Drag |
-| Hold 0.6 s | Right click |
-| Two-finger tap | Right click |
-| Two-finger move | Scroll with momentum (natural direction, switchable) |
-| Pinch / spread | Zoom (magnify) |
-| Two-finger rotate | Rotate |
-| Three/four-finger swipe up | Mission Control |
-| Three/four-finger swipe down | App Exposé |
-| Three/four-finger swipe left/right | Next / previous Space |
+| Tap | Linksklick |
+| Doppeltap | Doppelklick |
+| Drücken und bewegen | Drag |
+| Halten (0,6 s) | Rechtsklick |
+| Zwei-Finger-Tap | Rechtsklick |
+| Zwei-Finger-Bewegung | Scrollen mit Momentum (natürliche Richtung, umschaltbar) |
+| Pinch / Spread | Zoom |
+| Zwei-Finger-Drehung | Rotation |
+| Drei/vier Finger hoch | Mission Control |
+| Drei/vier Finger runter | App Exposé |
+| Drei/vier Finger links/rechts | Nächster / vorheriger Space |
 
-## Settings
+## Tech-Stack
 
-`~/Library/Application Support/TouchBridge/settings.json`, editable while the app runs ("Open settings file" in the menu). Keys: `schemaVersion` (always 1, written by the app), `enabled`, `displaySelection` (`{"auto":{}}` or `{"display":{"uuid":"…"}}`), `naturalScrolling`, `gesture` (thresholds in seconds and points), `calibrations` (per device serial: `orientation` 0/90/180/270, `scaleX`, `scaleY`, `offsetX`, `offsetY`), `launchAtLogin`. Out-of-range gesture values are clamped when the file is read (durations to 0–10 s, `momentumDecayPerFrame` to 0–0.999, `rotateThreshold` to 0–180°, distances and velocities to ≥ 0); `orientation` is reduced modulo 360 and becomes 0 unless it is 0, 90, 180 or 270.
+- Swift 6 (Sprachmodus 6), Swift Package Manager, macOS 14+
+- SwiftUI/AppKit (Menüleiste), IOKit HID, CoreGraphics (CGEvent), ServiceManagement
+- Tests mit Swift Testing
 
-## Troubleshooting
+## Schnellstart
 
-- Menu says "shared": exclusive access failed; check Input Monitoring for TouchBridge. In shared mode macOS also moves the cursor.
-- Taps land mirrored or rotated: set `calibrations.<serial>.orientation` to 90, 180 or 270.
-- Pinch does nothing in an app: open "Gesture Identifier…" from the menu and perform the gesture on it; if `magnify` lines appear there, the app does not support trackpad zoom.
-- Touching does nothing although the status says exclusive: check the log for `read feature report` lines. The panel switches to multitouch reporting only after its Feature reports were read; without them it sends mouse reports only (see `docs/notes/seize-spike.md`).
+### Voraussetzungen
+
+- macOS 14 oder neuer (entwickelt unter macOS 26)
+- Touchscreen, der unter Windows ohne Treiber läuft (HID-Digitizer). Referenzgerät: Elan-10-Finger-Controller, 24" 1080p
+- Xcode 16 oder neuer
+
+### Installation und Start
+
+```
+git clone https://github.com/Infactionfreddy/TouchBridge.git
+cd TouchBridge
+Scripts/build-app.sh          # baut und signiert dist/TouchBridge.app
+Scripts/install.sh            # kopiert nach ~/Applications und startet
+```
+
+Beim ersten Start im sich öffnenden Fenster **Input Monitoring** und **Accessibility** erteilen. Der Status aktualisiert sich selbst; nach der Freigabe kann macOS einen Neustart der App verlangen.
+
+> Hinweis: `Scripts/build-app.sh` signiert standardmäßig mit einer festen Entwickler-Identität; mit `SIGN_IDENTITY` die eigene setzen.
+
+## Konfiguration
+
+Datei: `~/Library/Application Support/TouchBridge/settings.json` (im Menü: „Open settings file").
+
+| Schlüssel / Variable | Beschreibung |
+| --- | --- |
+| `enabled` | Touch ein/aus |
+| `displaySelection` | `{"auto":{}}` oder `{"display":{"uuid":"…"}}` |
+| `naturalScrolling` | Scrollrichtung |
+| `gesture` | Schwellen in Sekunden/Punkten |
+| `calibrations` | je Seriennummer: `orientation`, `scaleX`, `scaleY`, `offsetX`, `offsetY` |
+| `launchAtLogin` | Start beim Login |
+| `SIGN_IDENTITY` (Umgebungsvariable, Build-Skript) | Signatur-Identität für `build-app.sh` |
+
+Details: [docs/KONFIGURATION.md](docs/KONFIGURATION.md).
+
+## Fehlersuche
+
+- Menü zeigt „shared": exklusiver Zugriff fehlgeschlagen; Input Monitoring prüfen. Im Shared-Modus bewegt macOS den Cursor mit.
+- Taps gespiegelt oder gedreht: `calibrations.<serial>.orientation` auf 90, 180 oder 270 setzen.
+- Pinch wirkt in einer App nicht: „Gesture Identifier…" öffnen und Geste ausführen; erscheinen dort `magnify`-Zeilen, unterstützt die App keinen Trackpad-Zoom.
+- Berührung ohne Wirkung trotz „exclusive": Log nach `read feature report` prüfen (siehe `docs/notes/seize-spike.md`).
 - Logs: `log stream --predicate 'subsystem == "org.touchbridge"' --level info`
-- `swift test` fails at codesign with "resource fork, Finder information, or similar detritus not allowed": run `swift test --scratch-path /tmp/touchbridge-build` or `xattr -cr .build` first (Finder attributes under ~/Documents).
+- `swift test` scheitert bei codesign („resource fork, Finder information…"): `swift test --scratch-path /tmp/touchbridge-build` oder `xattr -cr .build`.
 
-## Development
+## Projektstruktur
+
+```
+Package.swift
+App/Info.plist             Bundle-Metadaten
+Scripts/                   build-app.sh, install.sh
+Sources/
+  TouchCore/               HID-Parser, Decoder, Tracker, Gesten-Engine, Router, Settings (ohne System-APIs)
+  TouchDevice/             DeviceManager (IOKit HID)
+  TouchInject/             EventInjector, Momentum, Gesten-Felder (CGEvent)
+  TouchBridge/             Menüleisten-App (SwiftUI)
+  hidrecord/               CLI zum Aufzeichnen von Reports
+Tests/                     TouchCoreTests, TouchInjectTests, Fixtures
+docs/                      Dokumentation, Notizen, Specs, Pläne
+```
+
+## Entwicklung
 
 ```
 swift build
 swift test
-swift run hidrecord --seconds 10 --out capture.jsonl   # record raw reports of your screen
+swift run hidrecord --seconds 10 --out capture.jsonl
 ```
 
-First run on new hardware: run the seize spike with the panel connected. Quit TouchBridge first (two seizers make the spike report `shared`).
+Bei neuer Hardware zuerst den Seize-Spike ausführen (TouchBridge vorher beenden): `swift run hidrecord --seconds 12 --out Tests/TouchCoreTests/Fixtures/elan-two-finger.jsonl`. `mode=exclusive` und ein stillstehender macOS-Cursor sind das Erfolgskriterium. Das Referenzpanel liefert erst nach dem Lesen seiner Feature-Reports Multitouch-Daten; `DeviceManager` erledigt das nach jedem Öffnen.
 
-```
-swift run hidrecord --seconds 12 --out Tests/TouchCoreTests/Fixtures/elan-two-finger.jsonl
-```
+Design: `docs/superpowers/specs/`, Pläne: `docs/superpowers/plans/`. Die undokumentierten CGEvent-Felder für Magnify/Rotate stehen ausschließlich in `Sources/TouchInject/GestureEventFields.swift` und können mit macOS-Updates brechen.
 
-Look for `mode=exclusive` and for the macOS cursor no longer moving while you touch the screen. If `shared (seize failed 0x…)` appears, either Input Monitoring is missing for the terminal app, or exclusive access is not possible on this macOS; the latter needs the event-tap fallback described in the plan. The repository ships a recording from the reference panel (`RecordedReportTests.recordedElanSessionDecodes` checks it); re-record it for a different device. Note that the reference panel reports only mouse events until the host has read its Feature reports; `DeviceManager` does that after every open (see `docs/notes/seize-spike.md`).
+## Dokumentation
 
-Design: `docs/superpowers/specs/`. Plan: `docs/superpowers/plans/`. The undocumented CGEvent fields used for magnify/rotate live in `Sources/TouchInject/GestureEventFields.swift` only.
+- [Architektur](docs/ARCHITEKTUR.md)
+- [Installation](docs/INSTALLATION.md)
+- [Konfiguration](docs/KONFIGURATION.md)
+- [Entwicklung](docs/ENTWICKLUNG.md)
 
-## License
+## Lizenz
 
-MIT
+MIT, siehe [LICENSE](LICENSE).
