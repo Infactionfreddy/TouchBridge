@@ -19,7 +19,7 @@
 - TouchCore never reads system clocks. All time comes from `timestamp` parameters (nanoseconds, monotonic, `UInt64`).
 - Device matching is by HID usage only: Primary Usage Page `0x0D`, Primary Usage `0x04`. No vendor/product ID lists.
 - Undocumented CGEvent field numbers live only in `Sources/TouchInject/GestureEventFields.swift`, each with a source comment.
-- Bundle identifier `org.touchbridge.TouchBridge`; signing identity for dev builds `Apple Development: Frederic Garsolke (LLLQH7PQW7)`.
+- Bundle identifier `org.touchbridge.TouchBridge`; signing identity for dev builds: the local `Apple Development` certificate (via `SIGN_IDENTITY` or keychain lookup).
 - Logging: `os.Logger` with subsystem `org.touchbridge`, categories `device`, `pipeline`, `inject`, `permissions`. Raw coordinates only at `.debug`.
 - Settings file: `~/Library/Application Support/TouchBridge/settings.json`, `schemaVersion` 1.
 - Gesture defaults (spec 5.6): tapMaxDuration 0.25 s, tapMaxMovement 8 pt, doubleTapInterval 0.30 s, longPressDuration 0.60 s, classifyMovement 10 pt, pinchThreshold 12 pt, rotateThreshold 8°, momentumMinVelocity 50 pt/s, momentumDecayPerFrame 0.96 @ 60 Hz, momentumStopVelocity 20 pt/s, swipeDistance 60 pt, swipeMaxDuration 0.5 s, stuckTimeout 0.5 s.
@@ -3818,7 +3818,7 @@ git commit -m "feat(inject): CGEvent synthesis for mouse, phased scroll with mom
 set -euo pipefail
 cd "$(dirname "$0")/.."
 CONFIG="${1:-release}"
-IDENTITY="${SIGN_IDENTITY:-Apple Development: Frederic Garsolke (LLLQH7PQW7)}"
+IDENTITY="${SIGN_IDENTITY:?set SIGN_IDENTITY}"  # current script: see Scripts/build-app.sh
 APP="dist/TouchBridge.app"
 
 swift build -c "$CONFIG" --product TouchBridge

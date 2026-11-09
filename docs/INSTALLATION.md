@@ -20,7 +20,7 @@
    ```
    SIGN_IDENTITY="Apple Development: Dein Name (TEAMID)" Scripts/build-app.sh
    ```
-   Ohne `SIGN_IDENTITY` wird die im Skript hinterlegte Identität verwendet, die auf anderen Rechnern vermutlich nicht existiert. Ergebnis: `dist/TouchBridge.app`.
+   Ohne `SIGN_IDENTITY` nimmt das Skript die erste „Apple Development"-Identität aus dem Schlüsselbund (`security find-identity -v -p codesigning`); gibt es keine, signiert es ad hoc. Ergebnis: `dist/TouchBridge.app`.
 3. Installieren und starten:
    ```
    Scripts/install.sh

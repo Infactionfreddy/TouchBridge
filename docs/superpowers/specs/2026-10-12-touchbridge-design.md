@@ -82,7 +82,7 @@ Swift Package am Repo-Root, Swift 6 Sprachmodus, Mindestversion macOS 14.
 
 ### 4.3 Build, Bundle, Signatur
 
-- `swift build` erzeugt die Binaries; `Scripts/build-app.sh` baut daraus `TouchBridge.app` (Info.plist, Icon, Binary) und signiert mit der Identität "Apple Development: Frederic Garsolke (LLLQH7PQW7)". Für Releases: "Developer ID Application" plus Notarisierung, gleicher Skriptpfad mit Parameter.
+- `swift build` erzeugt die Binaries; `Scripts/build-app.sh` baut daraus `TouchBridge.app` (Info.plist, Icon, Binary) und signiert mit der lokalen "Apple Development"-Identität (`SIGN_IDENTITY` oder automatisch aus dem Schlüsselbund). Für Releases: "Developer ID Application" plus Notarisierung, gleicher Skriptpfad mit Parameter.
 - Bundle-ID: `org.touchbridge.TouchBridge` (änderbar, muss danach stabil bleiben, weil die Rechte daran hängen).
 - Installation für den Alltag nach `~/Applications/TouchBridge.app`; `Scripts/install.sh` kopiert und registriert das Login-Item.
 - Xcode kann `Package.swift` direkt öffnen; ein `.xcodeproj` wird nicht gepflegt.

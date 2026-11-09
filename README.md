@@ -61,7 +61,7 @@ Scripts/install.sh            # kopiert nach ~/Applications und startet
 
 Beim ersten Start im sich öffnenden Fenster **Input Monitoring** und **Accessibility** erteilen. Der Status aktualisiert sich selbst; nach der Freigabe kann macOS einen Neustart der App verlangen.
 
-> Hinweis: `Scripts/build-app.sh` signiert standardmäßig mit einer festen Entwickler-Identität; mit `SIGN_IDENTITY` die eigene setzen.
+> Hinweis: `Scripts/build-app.sh` nimmt `SIGN_IDENTITY`, sonst die erste „Apple Development"-Identität im Schlüsselbund, sonst Ad-hoc-Signatur (dann müssen die Rechte nach jedem Build neu erteilt werden).
 
 ## Konfiguration
 

@@ -53,7 +53,7 @@ Werte außerhalb des Bereichs werden beim Lesen geklemmt: Zeiten auf 0–10 s, `
 
 | Variable | Verwendet von | Beschreibung |
 | --- | --- | --- |
-| `SIGN_IDENTITY` | `Scripts/build-app.sh` | Überschreibt die Signatur-Identität |
+| `SIGN_IDENTITY` | `Scripts/build-app.sh` | Signatur-Identität; ohne Angabe erste „Apple Development"-Identität im Schlüsselbund, sonst ad hoc |
 
 Zur Laufzeit liest die App keine Umgebungsvariablen (Annahme aus dem gezeigten Code).
 
